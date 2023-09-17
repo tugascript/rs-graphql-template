@@ -1,0 +1,21 @@
+[package]
+name = "entities"
+version = "0.1.0"
+edition = "2021"
+publish = false
+authors = ["Afonso Barracha <barracha.afonso@gmail.com>"]
+license = "MPL-2.0"
+
+[lib]
+name = "entities"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+async-graphql = "6"
+chrono = "0.4"
+sea-orm = { version = "0.12", features = [
+    "sqlx-postgres",
+    "runtime-actix-native-tls",
+] }
+base64 = "0.21"
