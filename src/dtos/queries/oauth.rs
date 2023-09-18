@@ -4,9 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-pub use enums::*;
+use serde::Deserialize;
 
-pub mod bodies;
-pub mod enums;
-pub mod responses;
-pub mod queries;
+#[derive(Debug, Deserialize)]
+pub struct OAuth {
+    pub code: String,
+    pub state: String,
+}

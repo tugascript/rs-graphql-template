@@ -8,6 +8,8 @@ use std::env;
 
 use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
 
+use entities::enums::OAuthProviderEnum;
+
 #[derive(Debug)]
 pub enum ExternalProvider {
     Google,
@@ -20,6 +22,13 @@ impl ExternalProvider {
             "google" => Some(Self::Google),
             "facebook" => Some(Self::Facebook),
             _ => None,
+        }
+    }
+
+    pub fn to_oauth_provider(&self) -> OAuthProviderEnum {
+        match self {
+            ExternalProvider::Google => OAuthProviderEnum::Google,
+            ExternalProvider::Facebook => OAuthProviderEnum::Facebook,
         }
     }
 }
@@ -35,6 +44,7 @@ pub struct OAuth {
     google: ClientCredentials,
     facebook: ClientCredentials,
     url: String,
+    secret: String,
 }
 
 impl OAuth {
@@ -43,17 +53,20 @@ impl OAuth {
         let facebook = Self::build_facebook();
         let backend_url =
             env::var("BACKEND_URL").expect("Missing the BACKEND_URL environment variable.");
+        let secret =
+            env::var("OAUTH_SECRET").expect("Missing the OAUTH_SECRET environment variable.");
 
         Self {
             google,
             facebook,
             url: format!("{}/api/auth/ext", backend_url),
+            secret,
         }
     }
 
-    pub fn get_external_client(&self, provider: ExternalProvider) -> Result<BasicClient, String> {
+    pub fn get_external_client(&self, provider: &ExternalProvider) -> Result<BasicClient, String> {
         match provider {
-            ExternalProvider::Google => {
+            &ExternalProvider::Google => {
                 let auth_url =
                     AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
                         .map_err(|_| "Something went wrong")?;
@@ -70,7 +83,7 @@ impl OAuth {
                 )
                 .set_redirect_uri(redirect_url))
             }
-            ExternalProvider::Facebook => {
+            &ExternalProvider::Facebook => {
                 let auth_url =
                     AuthUrl::new("https://www.facebook.com/v18.0/dialog/oauth".to_string())
                         .map_err(|_| "Something went wrong")?;
@@ -103,6 +116,13 @@ impl OAuth {
         }
     }
 
+    pub fn get_external_client_info_url(&self, provider: &ExternalProvider) -> &str {
+        match provider {
+            ExternalProvider::Google => "https://www.googleapis.com/oauth2/v3/userinfo",
+            ExternalProvider::Facebook => "https://graph.facebook.com/v18.0/me",
+        }
+    }
+
     fn build_google() -> ClientCredentials {
         let client_id = ClientId::new(
             env::var("GOOGLE_CLIENT_ID")
@@ -117,27 +137,6 @@ impl OAuth {
             client_id,
             client_secret,
         }
-
-        /*        let client_id = ClientId::new(
-            env::var("GOOGLE_CLIENT_ID")
-                .expect("Missing the GOOGLE_CLIENT_ID environment variable."),
-        );
-        let client_secret = ClientSecret::new(
-            env::var("GOOGLE_CLIENT_SECRET")
-                .expect("Missing the GOOGLE_CLIENT_SECRET environment variable."),
-        );
-        let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
-            .expect("Invalid Google authorization endpoint URL");
-        let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())
-            .expect("Invalid Google token endpoint URL");
-        let back_end_url =
-            env::var("BACK_END_URL").expect("Missing the BACK_END_URL environment variable.");
-
-        BasicClient::new(client_id, Some(client_secret), auth_url, Some(token_url))
-            .set_redirect_uri(
-                oauth2::RedirectUrl::new(format!("{}/api/auth/ext/google/callback", back_end_url))
-                    .expect("Invalid Google redirect URL"),
-            )*/
     }
 
     fn build_facebook() -> ClientCredentials {
@@ -149,11 +148,6 @@ impl OAuth {
             env::var("FACEBOOK_CLIENT_SECRET")
                 .expect("Missing the FACEBOOK_CLIENT_SECRET environment variable."),
         );
-        /*        let auth_url = AuthUrl::new("https://www.facebook.com/v18.0/dialog/oauth".to_string())
-            .expect("Invalid Facebook authorization endpoint URL");
-        let token_url =
-            TokenUrl::new("https://graph.facebook.com/v18.0/oauth/access_token".to_string())
-                .expect("Invalid Facebook token endpoint URL");*/
 
         ClientCredentials {
             client_id,

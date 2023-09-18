@@ -5,35 +5,27 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use chrono::Utc;
-use sea_orm::{entity::prelude::*, ActiveValue};
+use sea_orm::{entity::prelude::*, ActiveValue, Condition};
+
+use super::enums::OAuthProviderEnum;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "token_blacklist")]
+#[sea_orm(table_name = "csrf_tokens")]
 pub struct Model {
-    #[sea_orm(primary_key, column_type = "Uuid")]
-    pub id: String,
-    #[sea_orm(column_type = "Integer")]
-    pub user_id: i32,
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    #[sea_orm(column_type = "Text", index)]
+    pub token: String,
+    #[sea_orm(column_type = "Text")]
+    pub verifier: String,
+    #[sea_orm(column_type = "String(Some(8))", index)]
+    pub provider: OAuthProviderEnum,
     #[sea_orm(column_type = "Timestamp", index)]
-    pub expires_at: DateTime,
     pub created_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::UserId",
-        to = "super::user::Column::Id"
-    )]
-    User,
-}
-
-impl Related<super::user::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::User.def()
-    }
-}
+pub enum Relation {}
 
 #[async_trait::async_trait]
 impl ActiveModelBehavior for ActiveModel {
@@ -47,11 +39,11 @@ impl ActiveModelBehavior for ActiveModel {
 }
 
 impl Entity {
-    pub fn find_by_id(id: &str) -> Select<Entity> {
-        Entity::find().filter(Column::Id.eq(id))
-    }
-
-    pub fn find_by_user(user_id: i32) -> Select<Entity> {
-        Entity::find().filter(Column::UserId.eq(user_id))
+    pub fn find_token(provider: OAuthProviderEnum, token: &str) -> Select<Entity> {
+        Entity::find().filter(
+            Condition::all()
+                .add(Column::Provider.eq(provider))
+                .add(Column::Token.eq(token)),
+        )
     }
 }

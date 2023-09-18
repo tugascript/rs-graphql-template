@@ -6,14 +6,24 @@
 
 use bcrypt::{hash, verify};
 use chrono::{Duration, Utc};
+use oauth2::{
+    http::{HeaderMap, HeaderValue, Method},
+    reqwest::async_http_client,
+    url::Url,
+    AuthorizationCode, CsrfToken, HttpRequest, PkceCodeChallenge, PkceCodeVerifier, Scope,
+    TokenResponse,
+};
 use rand::Rng;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ModelTrait};
+use sea_orm::{ActiveModelTrait, PaginatorTrait};
 
-use entities::{access_code, enums::oauth_provider_enum::OAuthProviderEnum, oauth_provider, user};
+use entities::{
+    access_code, csrf_token, enums::oauth_provider_enum::OAuthProviderEnum, oauth_provider,
+    token_blacklist, user,
+};
 
-use crate::dtos::{bodies, responses};
-use crate::providers::{Database, Jwt, Mailer, TokenType};
+use crate::dtos::{bodies, queries, responses};
+use crate::providers::{Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
 use crate::startup::AuthTokens;
 
 use super::{helpers::verify_password, users_service};
@@ -224,13 +234,29 @@ pub async fn confirm_sign_in(
     ))
 }
 
+async fn check_blacklist(db: &Database, token_id: &str) -> bool {
+    let count = match token_blacklist::Entity::find_by_id(token_id)
+        .count(db.get_connection())
+        .await
+    {
+        Ok(result) => result,
+        Err(_) => return false,
+    };
+    count > 0
+}
+
 pub async fn refresh_token(
     db: &Database,
     jwt: &Jwt,
     auth_tokens: AuthTokens,
 ) -> Result<responses::Auth, String> {
     if let Some(refresh_token) = auth_tokens.refresh_token {
-        let (id, version, _) = jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
+        let (id, version, token_id) = jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
+
+        if check_blacklist(db, &token_id).await {
+            return Err("Invalid token".to_string());
+        }
+
         let user = users_service::find_one_by_version(db, id, version).await?;
         let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
         Ok(responses::Auth::new(
@@ -270,4 +296,100 @@ pub async fn reset_password(db: &Database, jwt: &Jwt, mailer: &Mailer, email: &s
     }
 
     true
+}
+
+async fn save_csrf_token(
+    db: &Database,
+    provider: &ExternalProvider,
+    token: &str,
+    verifier: &str,
+) -> Result<(), String> {
+    csrf_token::ActiveModel {
+        token: Set(token.to_string()),
+        verifier: Set(verifier.to_string()),
+        provider: Set(provider.to_oauth_provider()),
+        ..Default::default()
+    }
+    .insert(db.get_connection())
+    .await
+    .map_err(|_| "Something went wrong")?;
+    Ok(())
+}
+
+async fn get_csrf_token(
+    db: &Database,
+    provider: &ExternalProvider,
+    token: &str,
+) -> Result<(String, String), String> {
+    let csrf_token = csrf_token::Entity::find_token(provider.to_oauth_provider(), token)
+        .one(db.get_connection())
+        .await
+        .map_err(|_| "Something went wrong")?;
+    if let Some(csrf_token) = csrf_token {
+        if csrf_token.created_at + Duration::minutes(5) > Utc::now().naive_utc() {
+            return Err("Token expired".to_string());
+        }
+
+        Ok((csrf_token.token, csrf_token.verifier))
+    } else {
+        Err("Invalid state".to_string())
+    }
+}
+
+pub async fn oauth_callback(
+    db: &Database,
+    oauth: &OAuth,
+    provider: &ExternalProvider,
+) -> Result<String, String> {
+    let scopes = oauth.get_external_client_scopes(provider);
+    let client = oauth.get_external_client(provider)?;
+    let mut request = client.authorize_url(CsrfToken::new_random);
+    let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
+
+    for scope in scopes {
+        request = request.add_scope(Scope::new(scope.to_string()));
+    }
+
+    let (url, token) = request.set_pkce_challenge(pkce_code_challenge).url();
+    save_csrf_token(db, provider, token.secret(), pkce_code_verifier.secret()).await?;
+    Ok(url.to_string())
+}
+
+pub async fn oauth_sign_in(
+    db: &Database,
+    oauth: &OAuth,
+    jwt: &Jwt,
+    provider: &ExternalProvider,
+    query: queries::OAuth,
+) -> Result<responses::Auth, String> {
+    let client = oauth.get_external_client(provider)?;
+    let (token, verifier) = get_csrf_token(db, provider, &query.state).await?;
+
+    if token != query.state {
+        return Err("Invalid state".to_string());
+    }
+
+    let token_response = client
+        .exchange_code(AuthorizationCode::new(query.code))
+        .set_pkce_verifier(PkceCodeVerifier::new(verifier))
+        .request_async(async_http_client)
+        .await
+        .map_err(|_| "Something went wrong")?;
+    let url = oauth.get_external_client_info_url(provider);
+    let mut headers = HeaderMap::new();
+    let auth_header = HeaderValue::from_str(&format!(
+        "Bearer {}",
+        token_response.access_token().secret()
+    ))
+    .map_err(|_| "Something went wrong")?;
+    headers.insert("Authorization", auth_header);
+    let result = async_http_client(HttpRequest {
+        headers,
+        url: Url::parse(url).map_err(|_| "Something went wrong")?,
+        method: Method::GET,
+        body: vec![],
+    })
+    .await
+    .map_err(|_| "Something went wrong")?;
+    todo!()
 }
