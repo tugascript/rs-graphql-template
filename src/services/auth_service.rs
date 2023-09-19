@@ -7,13 +7,11 @@
 use bcrypt::{hash, verify};
 use chrono::{Duration, Utc};
 use oauth2::{
-    http::{HeaderMap, HeaderValue, Method},
-    reqwest::async_http_client,
-    url::Url,
-    AuthorizationCode, CsrfToken, HttpRequest, PkceCodeChallenge, PkceCodeVerifier, Scope,
-    TokenResponse,
+    reqwest::async_http_client, AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier,
+    Scope, TokenResponse,
 };
 use rand::Rng;
+use reqwest::Client;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, PaginatorTrait};
 
@@ -115,7 +113,6 @@ pub async fn sign_up(
     jwt: &Jwt,
     mailer: &Mailer,
     body: bodies::SignUp,
-    provider: OAuthProviderEnum,
 ) -> Result<responses::SignUp, String> {
     if body.password1 != body.password2 {
         return Err("Passwords do not match".to_string());
@@ -128,27 +125,14 @@ pub async fn sign_up(
         body.date_of_birth,
         body.email,
         body.password1,
-        provider.clone(),
+        OAuthProviderEnum::Local,
     )
     .await?;
-
-    match provider {
-        OAuthProviderEnum::Local => {
-            let confirmation_token = jwt.generate_email_token(TokenType::Confirmation, &user)?;
-            mailer.send_confirmation_email(&user.email, &user.full_name(), &confirmation_token)?;
-            Ok(responses::SignUp::Message(
-                "Confirmation email sent".to_string(),
-            ))
-        }
-        _ => {
-            let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
-            Ok(responses::SignUp::Auth(responses::Auth::new(
-                access_token,
-                refresh_token,
-                jwt.get_access_token_time(),
-            )))
-        }
-    }
+    let confirmation_token = jwt.generate_email_token(TokenType::Confirmation, &user)?;
+    mailer.send_confirmation_email(&user.email, &user.full_name(), &confirmation_token)?;
+    Ok(responses::SignUp::Message(
+        "Confirmation email sent".to_string(),
+    ))
 }
 
 pub async fn confirm_email(
@@ -376,20 +360,31 @@ pub async fn oauth_sign_in(
         .await
         .map_err(|_| "Something went wrong")?;
     let url = oauth.get_external_client_info_url(provider);
-    let mut headers = HeaderMap::new();
-    let auth_header = HeaderValue::from_str(&format!(
-        "Bearer {}",
-        token_response.access_token().secret()
+    let auth_header = format!("Bearer {}", token_response.access_token().secret());
+    let result = Client::new()
+        .get(url)
+        .header("Authorization", &auth_header)
+        .send()
+        .await
+        .map_err(|_| "Something went wrong")?;
+    let user_info: responses::UserInfo = result
+        .json::<responses::OAuthUserInfo>()
+        .await
+        .map_err(|_| "Something went wrong")?
+        .try_into()?;
+    let user = users_service::find_or_create(
+        db,
+        provider.to_oauth_provider(),
+        user_info.first_name,
+        user_info.last_name,
+        user_info.date_of_birth,
+        user_info.email,
+    )
+    .await?;
+    let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
+    Ok(responses::Auth::new(
+        access_token,
+        refresh_token,
+        jwt.get_access_token_time(),
     ))
-    .map_err(|_| "Something went wrong")?;
-    headers.insert("Authorization", auth_header);
-    let result = async_http_client(HttpRequest {
-        headers,
-        url: Url::parse(url).map_err(|_| "Something went wrong")?,
-        method: Method::GET,
-        body: vec![],
-    })
-    .await
-    .map_err(|_| "Something went wrong")?;
-    todo!()
 }

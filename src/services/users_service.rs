@@ -22,21 +22,24 @@ pub async fn create_user(
     first_name: String,
     last_name: String,
     date_of_birth: String,
-    email: String,
-    password: String,
+    mut email: String,
+    mut password: String,
     provider: OAuthProviderEnum,
 ) -> Result<Model, String> {
-    let formatted_email = email.to_lowercase();
-    let count = Entity::find_by_email(&formatted_email)
-        .count(db.get_connection())
-        .await
-        .map_err(|_| "Could not check if user exists".to_string())?;
+    if provider == OAuthProviderEnum::Local {
+        email = email.to_lowercase();
+        let count = Entity::find_by_email(&email)
+            .count(db.get_connection())
+            .await
+            .map_err(|_| "Could not check if user exists".to_string())?;
 
-    if count > 0 {
-        return Err("User already exists".to_string());
+        if count > 0 {
+            return Err("User already exists".to_string());
+        }
+
+        password = hash_password(&password)?;
     }
 
-    let hashed_password = hash_password(&password)?;
     let date_of_birth = NaiveDate::parse_from_str(&date_of_birth, "%Y-%m-%d")
         .map_err(|_| "Could not parse date")?;
     let user = db
@@ -44,10 +47,10 @@ pub async fn create_user(
         .transaction::<_, Model, DbErr>(|txn| {
             Box::pin(async move {
                 let user = ActiveModel {
-                    email: Set(formatted_email.clone()),
-                    first_name: Set(first_name.to_string()),
-                    last_name: Set(last_name.to_string()),
-                    password: Set(hashed_password),
+                    email: Set(email.clone()),
+                    first_name: Set(first_name),
+                    last_name: Set(last_name),
+                    password: Set(password),
                     date_of_birth: Set(date_of_birth),
                     confirmed: Set(provider != OAuthProviderEnum::Local),
                     ..Default::default()
@@ -55,7 +58,7 @@ pub async fn create_user(
                 .insert(txn)
                 .await?;
                 oauth_provider::ActiveModel {
-                    user_email: Set(formatted_email),
+                    user_email: Set(email),
                     provider: Set(provider),
                     two_factor: Set(provider == OAuthProviderEnum::Local),
                     ..Default::default()
@@ -68,6 +71,37 @@ pub async fn create_user(
         })
         .await
         .map_err(|_| "Something went wrong")?;
+    Ok(user)
+}
+
+pub async fn find_or_create(
+    db: &Database,
+    provider: OAuthProviderEnum,
+    first_name: String,
+    last_name: String,
+    date_of_birth: String,
+    email: String,
+) -> Result<Model, String> {
+    let formatted_email = email.to_lowercase();
+    let user = Entity::find_by_email(&formatted_email)
+        .one(db.get_connection())
+        .await
+        .map_err(|_| "Something went wrong")?;
+
+    if let Some(model) = user {
+        return Ok(model);
+    }
+
+    let user = create_user(
+        db,
+        first_name,
+        last_name,
+        date_of_birth,
+        formatted_email,
+        "none".to_string(),
+        provider,
+    )
+    .await?;
     Ok(user)
 }
 

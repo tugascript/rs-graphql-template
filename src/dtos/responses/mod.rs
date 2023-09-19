@@ -5,9 +5,11 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 pub use auth::*;
+pub use oauth::*;
 pub use sign_in::*;
 pub use sign_up::*;
 
 pub mod auth;
+pub mod oauth;
 pub mod sign_in;
 pub mod sign_up;
