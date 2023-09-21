@@ -2911,6 +2911,7 @@ dependencies = [
  "async-graphql-actix-web",
  "bcrypt",
  "chrono",
+ "derive_more",
  "entities",
  "image",
  "jsonwebtoken",
@@ -2922,6 +2923,7 @@ dependencies = [
  "rusoto_s3",
  "sea-orm",
  "serde",
+ "thiserror",
  "tokio",
  "uuid",
 ]
