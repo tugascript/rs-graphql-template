@@ -1,4 +1,13 @@
+// Copyright (c) 2023 Afonso Barracha
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+use anyhow::Error;
 use serde::{Deserialize, Serialize};
+
+use crate::common::ServiceError;
 
 pub struct UserInfo {
     pub first_name: String,
@@ -9,19 +18,21 @@ pub struct UserInfo {
 }
 
 impl TryFrom<GoogleUserInfoResponse> for UserInfo {
-    type Error = String;
+    type Error = ServiceError;
 
     fn try_from(value: GoogleUserInfoResponse) -> Result<Self, Self::Error> {
-        let first_name = value
-            .given_name
-            .ok_or_else(|| "Missing given_name".to_string())?;
-        let last_name = value
-            .family_name
-            .ok_or_else(|| "Missing family_name".to_string())?;
-        let email = value.email.ok_or_else(|| "Missing email".to_string())?;
-        let date_of_birth = value
-            .birthdate
-            .ok_or_else(|| "Missing birthdate".to_string())?;
+        let first_name = value.given_name.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing given name", None)
+        })?;
+        let last_name = value.family_name.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing family name", None)
+        })?;
+        let email = value
+            .email
+            .ok_or_else(|| ServiceError::internal_server_error::<Error>("Missing email", None))?;
+        let date_of_birth = value.birthdate.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing birthdate", None)
+        })?;
 
         Ok(Self {
             first_name,
@@ -34,19 +45,21 @@ impl TryFrom<GoogleUserInfoResponse> for UserInfo {
 }
 
 impl TryFrom<FacebookUserInfoResponse> for UserInfo {
-    type Error = String;
+    type Error = ServiceError;
 
     fn try_from(value: FacebookUserInfoResponse) -> Result<Self, Self::Error> {
-        let first_name = value
-            .first_name
-            .ok_or_else(|| "Missing first_name".to_string())?;
-        let last_name = value
-            .last_name
-            .ok_or_else(|| "Missing last_name".to_string())?;
-        let email = value.email.ok_or_else(|| "Missing email".to_string())?;
-        let birth_date = value
-            .birthday
-            .ok_or_else(|| "Missing birthday".to_string())?;
+        let first_name = value.first_name.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing first name", None)
+        })?;
+        let last_name = value.last_name.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing last name", None)
+        })?;
+        let email = value
+            .email
+            .ok_or_else(|| ServiceError::internal_server_error::<Error>("Missing email", None))?;
+        let birth_date = value.birthday.ok_or_else(|| {
+            ServiceError::internal_server_error::<Error>("Missing birth date", None)
+        })?;
 
         Ok(Self {
             first_name,
@@ -104,7 +117,7 @@ pub enum OAuthUserInfo {
 }
 
 impl TryInto<UserInfo> for OAuthUserInfo {
-    type Error = String;
+    type Error = ServiceError;
 
     fn try_into(self) -> Result<UserInfo, Self::Error> {
         match self {

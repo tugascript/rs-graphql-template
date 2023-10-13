@@ -10,6 +10,8 @@ use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, T
 
 use entities::enums::OAuthProviderEnum;
 
+use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
+
 #[derive(Debug)]
 pub enum ExternalProvider {
     Google,
@@ -64,16 +66,25 @@ impl OAuth {
         }
     }
 
-    pub fn get_external_client(&self, provider: &ExternalProvider) -> Result<BasicClient, String> {
+    pub fn get_external_client(
+        &self,
+        provider: &ExternalProvider,
+    ) -> Result<BasicClient, ServiceError> {
         match provider {
             &ExternalProvider::Google => {
                 let auth_url =
                     AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
-                        .map_err(|_| "Something went wrong")?;
+                        .map_err(|e| {
+                            ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e))
+                        })?;
                 let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())
-                    .map_err(|_| "Something went wrong")?;
+                    .map_err(|e| {
+                        ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e))
+                    })?;
                 let redirect_url = RedirectUrl::new(format!("{}/google/callback", &self.url))
-                    .map_err(|_| "Something went wrong")?;
+                    .map_err(|e| {
+                        ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e))
+                    })?;
 
                 Ok(BasicClient::new(
                     self.google.client_id.clone(),
@@ -86,13 +97,17 @@ impl OAuth {
             &ExternalProvider::Facebook => {
                 let auth_url =
                     AuthUrl::new("https://www.facebook.com/v18.0/dialog/oauth".to_string())
-                        .map_err(|_| "Something went wrong")?;
+                        .map_err(|e| {
+                            ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e))
+                        })?;
                 let token_url = TokenUrl::new(
                     "https://graph.facebook.com/v18.0/oauth/access_token".to_string(),
                 )
-                .map_err(|_| "Something went wrong")?;
+                .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
                 let redirect_url = RedirectUrl::new(format!("{}/facebook/callback", &self.url))
-                    .map_err(|_| "Something went wrong")?;
+                    .map_err(|e| {
+                        ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e))
+                    })?;
 
                 Ok(BasicClient::new(
                     self.facebook.client_id.clone(),

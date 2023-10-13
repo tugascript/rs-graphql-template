@@ -4,7 +4,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use actix_web::{cookie::Cookie, http::header::HeaderMap, HttpRequest};
+use std::future::{ready, Ready};
+
+use actix_web::{cookie::Cookie, dev::Payload, http::header::HeaderMap, FromRequest, HttpRequest};
+
+use crate::common::ServiceError;
 
 fn get_access_token_from_headers(headers: &HeaderMap) -> Option<String> {
     let auth_header = match headers.get("Authorization") {
@@ -55,5 +59,14 @@ impl AuthTokens {
             access_token: get_access_token_from_headers(request.headers()),
             refresh_token: get_refresh_token_from_cookie(request.cookie("refresh_token")),
         }
+    }
+}
+
+impl FromRequest for AuthTokens {
+    type Error = ServiceError;
+    type Future = Ready<Result<AuthTokens, Self::Error>>;
+
+    fn from_request(request: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        ready(Ok(Self::new(request)))
     }
 }

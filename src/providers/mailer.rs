@@ -1,9 +1,17 @@
+// Copyright (c) 2023 Afonso Barracha
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::env;
 
 use lettre::{
     transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message,
     Tokio1Executor,
 };
+
+use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
 
 #[derive(Clone, Debug)]
 pub struct Mailer {
@@ -32,24 +40,28 @@ impl Mailer {
         }
     }
 
-    fn send_email(&self, to: String, subject: String, body: String) -> Result<(), String> {
+    fn send_email(&self, to: String, subject: String, body: String) -> Result<(), ServiceError> {
         let message = Message::builder()
             .from(self.email.parse().unwrap())
             .to(to.parse().unwrap())
             .subject(subject)
             .body(body);
 
-        if let Ok(msg) = message {
-            let master_mailer = self.mailer.clone();
-            tokio::spawn(async move {
-                match master_mailer.send(msg).await {
-                    Err(_) => eprintln!("Error sending the email"),
-                    _ => (),
-                }
-            });
-            Ok(())
-        } else {
-            Err("Invalid subject or bodies".to_string())
+        match message {
+            Ok(msg) => {
+                let master_mailer = self.mailer.clone();
+                tokio::spawn(async move {
+                    match master_mailer.send(msg).await {
+                        Err(_) => eprintln!("Error sending the email"),
+                        _ => (),
+                    }
+                });
+                Ok(())
+            }
+            Err(e) => Err(ServiceError::internal_server_error(
+                SOMETHING_WENT_WRONG,
+                Some(e),
+            )),
         }
     }
 
@@ -58,7 +70,8 @@ impl Mailer {
         email: &str,
         full_name: &str,
         jwt: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ServiceError> {
+        tracing::trace_span!("Sending confirmation email");
         let link = format!("{}/confirmation/{}", self.front_end_url, &jwt);
 
         self.send_email(
@@ -94,7 +107,7 @@ impl Mailer {
         email: &str,
         full_name: &str,
         code: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ServiceError> {
         self.send_email(
             email.to_owned(),
             format!("Your access code, {}", full_name),
@@ -124,7 +137,7 @@ impl Mailer {
         email: &str,
         full_name: &str,
         token: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ServiceError> {
         let link = format!("{}/confirmation/{}", self.front_end_url, &token);
 
         self.send_email(

@@ -7,9 +7,9 @@
 pub use auth::*;
 pub use oauth::*;
 pub use sign_in::*;
-pub use sign_up::*;
+pub use message::*;
 
 pub mod auth;
 pub mod oauth;
 pub mod sign_in;
-pub mod sign_up;
+pub mod message;

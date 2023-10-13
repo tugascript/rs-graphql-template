@@ -6,7 +6,7 @@
 
 use chrono::{Duration, Utc};
 use entities::{enums::role_enum::RoleEnum, user::Model};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, errors::Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ pub struct Claims {
 }
 
 impl Claims {
-    pub fn create_token(user: &Model, secret: &str, exp: i64, iss: &str) -> Result<String, String> {
+    pub fn create_token(user: &Model, secret: &str, exp: i64, iss: &str) -> Result<String> {
         let now = Utc::now();
         let claims = Claims {
             sub: "access".to_string(),
@@ -43,28 +43,19 @@ impl Claims {
             exp: (now + Duration::seconds(exp)).timestamp(),
             user: AccessToken::from(user),
         };
-
-        if let Ok(token) = encode(
+        encode(
             &Header::default(),
             &claims,
             &EncodingKey::from_secret(secret.as_bytes()),
-        ) {
-            Ok(token)
-        } else {
-            Err("Could not create the access token".to_string())
-        }
+        )
     }
 
-    pub fn decode_token(secret: &str, token: &str) -> Result<(i32, RoleEnum), String> {
-        let claims = decode::<Claims>(
+    pub fn decode_token(secret: &str, token: &str) -> Result<(i32, RoleEnum)> {
+        let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
             &Validation::default(),
-        );
-
-        match claims {
-            Ok(s) => Ok((s.claims.user.id, s.claims.user.role)),
-            Err(_) => Err("Invalid token".to_string()),
-        }
+        )?;
+        Ok((token_data.claims.user.id, token_data.claims.user.role))
     }
 }

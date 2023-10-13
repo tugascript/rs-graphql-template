@@ -23,3 +23,13 @@ pub enum OAuthProviderEnum {
     #[sea_orm(string_value = "FACEBOOK")]
     Facebook,
 }
+
+impl OAuthProviderEnum {
+    pub fn to_str<'a>(&self) -> &'a str {
+        match self {
+            OAuthProviderEnum::Local => "LOCAL",
+            OAuthProviderEnum::Google => "GOOGLE",
+            OAuthProviderEnum::Facebook => "FACEBOOK",
+        }
+    }
+}

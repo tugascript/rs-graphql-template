@@ -5,18 +5,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    password_hash::{rand_core::OsRng, PasswordHasher, Result, SaltString},
     Argon2, PasswordHash, PasswordVerifier,
 };
 
-pub fn hash_password(password: &str) -> Result<String, &str> {
+pub fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default().hash_password(password.as_bytes(), &salt);
-
-    match hash {
-        Ok(value) => Ok(value.to_string()),
-        Err(_) => Err("Could not hash password, please try again"),
-    }
+    let hash = Argon2::default().hash_password(password.as_bytes(), &salt)?;
+    Ok(hash.to_string())
 }
 
 pub fn verify_password<'a>(password: &'a str, str_hash: &'a str) -> bool {

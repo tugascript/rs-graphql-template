@@ -4,8 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-pub use base64_cursor::*;
-pub use traits::*;
+pub use total_count::*;
 
-pub mod base64_cursor;
-pub mod traits;
+pub mod total_count;

@@ -6,10 +6,15 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::dtos::responses::Auth;
-
 #[derive(Serialize, Deserialize, Debug)]
-pub enum SignIn {
-    Auth(Auth),
-    Mfa,
+pub struct Message {
+    pub message: String,
+}
+
+impl Message {
+    pub fn new(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
 }

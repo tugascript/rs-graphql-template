@@ -5,10 +5,11 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use chrono::{Duration, Utc};
-use entities::user::Model;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, errors::Result, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use entities::user::Model;
 
 use crate::providers::TokenType;
 
@@ -16,7 +17,7 @@ use crate::providers::TokenType;
 pub struct EmailToken {
     id: i32,
     version: i16,
-    token_id: String
+    token_id: String,
 }
 
 impl From<&Model> for EmailToken {
@@ -24,7 +25,7 @@ impl From<&Model> for EmailToken {
         Self {
             id: model.id.to_owned(),
             version: model.version.to_owned(),
-            token_id: Uuid::new_v4().to_string()
+            token_id: Uuid::new_v4().to_string(),
         }
     }
 }
@@ -45,7 +46,7 @@ impl Claims {
         exp: i64,
         iss: &str,
         token_type: TokenType,
-    ) -> Result<String, String> {
+    ) -> Result<String> {
         let sub = token_type.to_string();
         let now = Utc::now();
         let claims = Claims {
@@ -55,28 +56,24 @@ impl Claims {
             exp: (now + Duration::seconds(exp)).timestamp(),
             user: EmailToken::from(user),
         };
-
-        if let Ok(token) = encode(
+        encode(
             &Header::default(),
             &claims,
             &EncodingKey::from_secret(secret.as_bytes()),
-        ) {
-            Ok(token)
-        } else {
-            Err("Could not create the access token".to_string())
-        }
+        )
     }
 
-    pub fn decode_token<'a>(secret: &'a str, token: &'a str) -> Result<(i32, i16, &'a str), &'a str> {
-        let claims = decode::<Claims>(
+    pub fn decode_token<'a>(secret: &'a str, token: &'a str) -> Result<(i32, i16, &'a str, i64)> {
+        let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
             &Validation::default(),
-        );
-
-        match claims {
-            Ok(s) => Ok((s.claims.user.id, s.claims.user.version, &s.claims.user.token_id)),
-            Err(_) => Err("Invalid token"),
-        }
+        )?;
+        Ok((
+            token_data.claims.user.id,
+            token_data.claims.user.version,
+            &token_data.claims.user.token_id,
+            token_data.claims.exp,
+        ))
     }
 }

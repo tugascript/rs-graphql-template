@@ -6,9 +6,10 @@
 
 use async_graphql::*;
 use chrono::Utc;
-use sea_orm::{ActiveValue, Condition, entity::prelude::*};
+use sea_orm::{entity::prelude::*, ActiveValue, Condition};
 
 use crate::enums::{cursor_enum::CursorEnum, order_enum::OrderEnum, role_enum::RoleEnum};
+use crate::helpers::{decode_cursor, encode_cursor, GQLAfter, GQLFilter};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, SimpleObject)]
 #[sea_orm(table_name = "users")]
@@ -40,6 +41,7 @@ pub struct Model {
     #[sea_orm(column_type = "Boolean", default = false)]
     pub suspended: bool,
     #[sea_orm(column_type = "Text")]
+    #[graphql(skip)]
     pub password: String,
     #[graphql(skip)]
     pub created_at: DateTime,
@@ -83,6 +85,15 @@ impl Model {
     }
 }
 
+impl GQLAfter for Model {
+    fn after(&self, cursor: CursorEnum) -> String {
+        match cursor {
+            CursorEnum::Alpha => encode_cursor(&self.username),
+            CursorEnum::Date => encode_cursor(&self.id.to_string()),
+        }
+    }
+}
+
 impl Entity {
     pub fn find_by_id(id: i32) -> Select<Entity> {
         Self::find().filter(Column::Id.eq(id))
@@ -103,45 +114,48 @@ impl Entity {
                 .add(Column::Version.eq(version)),
         )
     }
+}
 
-    pub fn filter(
+impl GQLFilter for Entity {
+    fn filter(
         order: OrderEnum,
         cursor: CursorEnum,
-        after: Option<&str>,
-        username: Option<&str>,
-        first_name: Option<&str>,
-        last_name: Option<&str>,
-        description: Option<&str>,
-    ) -> Select<Entity> {
+        after: Option<String>,
+        search: Option<String>,
+    ) -> (Select<Entity>, Option<Select<Entity>>) {
         let mut condition = Condition::any();
+        let mut inverse_condition = None;
 
-        if let Some(username) = username {
-            condition = condition.add(Column::Username.contains(username));
-        }
-        if let Some(first_name) = first_name {
-            condition = condition.add(Column::FirstName.contains(first_name));
-        }
-        if let Some(last_name) = last_name {
-            condition = condition.add(Column::LastName.contains(last_name));
-        }
-        if let Some(description) = description {
-            condition = condition.add(Column::Description.contains(description));
+        if let Some(search) = search {
+            condition = condition
+                .add(Column::Username.contains(&search))
+                .add(Column::FirstName.contains(&search))
+                .add(Column::LastName.contains(&search))
+                .add(Column::Description.contains(&search));
         }
         if let Some(after) = after {
-            let after = crate::helpers::decode_after(after);
+            let after = decode_cursor(&after);
 
             if let Some(after) = after {
                 match cursor {
                     CursorEnum::Alpha => {
+                        inverse_condition = Some(condition.clone().add(match order {
+                            OrderEnum::Asc => Column::Username.lt(&after),
+                            OrderEnum::Desc => Column::Username.gt(&after),
+                        }));
                         condition = condition.add(match order {
-                            OrderEnum::Asc => Column::Username.gt(after),
-                            OrderEnum::Desc => Column::Username.lt(after),
+                            OrderEnum::Asc => Column::Username.gt(&after),
+                            OrderEnum::Desc => Column::Username.lt(&after),
                         });
                     }
                     CursorEnum::Date => {
                         let after = after.parse::<i32>();
 
                         if let Ok(after) = after {
+                            inverse_condition = Some(condition.clone().add(match order {
+                                OrderEnum::Asc => Column::Id.lt(after),
+                                OrderEnum::Desc => Column::Id.gt(after),
+                            }));
                             condition = condition.add(match order {
                                 OrderEnum::Asc => Column::Id.gt(after),
                                 OrderEnum::Desc => Column::Id.lt(after),
@@ -152,6 +166,12 @@ impl Entity {
             }
         }
 
-        Self::find().filter(condition)
+        (
+            Self::find().filter(condition),
+            match inverse_condition {
+                Some(inverse_condition) => Some(Self::find().filter(inverse_condition)),
+                None => None,
+            },
+        )
     }
 }

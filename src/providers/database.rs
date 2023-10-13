@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use anyhow::Error;
 use sea_orm::DatabaseConnection;
 
 #[derive(Clone, Debug)]
@@ -12,13 +13,11 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new() -> Self {
-        let con_str = std::env::var("DATABASE_URL").unwrap();
-        let connection = sea_orm::Database::connect(con_str)
-            .await
-            .expect("Could not connect to database");
+    pub async fn new() -> Result<Self, Error> {
+        let con_str = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let connection = sea_orm::Database::connect(con_str).await?;
 
-        Self { connection }
+        Ok(Self { connection })
     }
 
     pub fn get_connection(&self) -> &DatabaseConnection {

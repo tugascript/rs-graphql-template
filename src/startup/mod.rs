@@ -4,6 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-pub mod helpers;
+pub use app::*;
+pub use schema_builder::*;
+pub use telemetry::*;
 
-pub use helpers::*;
+pub mod app;
+pub mod schema_builder;
+pub mod telemetry;

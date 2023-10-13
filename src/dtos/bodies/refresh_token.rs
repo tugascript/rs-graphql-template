@@ -6,10 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Auth;
-
 #[derive(Serialize, Deserialize, Debug)]
-pub enum SignUp {
-    Message(String),
-    Auth(Auth),
+pub struct RefreshToken {
+    pub refresh_token: String,
 }

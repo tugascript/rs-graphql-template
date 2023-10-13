@@ -4,6 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-pub mod auth_tokens;
+use serde::{Deserialize, Serialize};
 
-pub use auth_tokens::*;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ConfirmEmail {
+    pub confirmation_token: String,
+}

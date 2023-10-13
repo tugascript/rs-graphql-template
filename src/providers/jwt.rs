@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 use entities::{enums::role_enum::RoleEnum, user::Model};
 
+use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
+
 use super::helpers::{access_token, email_token};
 
 #[derive(Clone, Debug)]
@@ -40,6 +42,7 @@ pub struct Jwt {
     reset: SingleJwt,
     confirmation: SingleJwt,
     refresh: SingleJwt,
+    refresh_name: String,
     iss: Uuid,
 }
 
@@ -56,8 +59,8 @@ impl Jwt {
             .unwrap();
         let refresh_secret = env::var("REFRESH_SECRET").unwrap();
         let refresh_time = env::var("REFRESH_TIME").unwrap().parse::<i64>().unwrap();
+        let refresh_name = env::var("REFRESH_NAME").unwrap();
         let api_id = env::var("API_ID").unwrap();
-
         let iss = Uuid::parse_str(&api_id).unwrap();
 
         Self {
@@ -77,24 +80,26 @@ impl Jwt {
                 secret: refresh_secret,
                 exp: refresh_time,
             },
+            refresh_name,
             iss,
         }
     }
 
-    pub fn generate_access_token(&self, user: &Model) -> Result<String, String> {
+    pub fn generate_access_token(&self, user: &Model) -> Result<String, ServiceError> {
         access_token::Claims::create_token(
             user,
             &self.access.secret,
             self.access.exp,
             &self.iss.to_string(),
         )
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))
     }
 
     pub fn generate_email_token(
         &self,
         token_type: TokenType,
         user: &Model,
-    ) -> Result<String, String> {
+    ) -> Result<String, ServiceError> {
         email_token::Claims::create_token(
             user,
             &self.confirmation.secret,
@@ -102,12 +107,13 @@ impl Jwt {
             &self.iss.to_string(),
             token_type,
         )
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))
     }
 
-    pub fn verify_access_token(&self, token: &str) -> Result<(i32, RoleEnum), &str> {
+    pub fn verify_access_token(&self, token: &str) -> Result<(i32, RoleEnum), ServiceError> {
         match access_token::Claims::decode_token(&self.access.secret, token) {
             Ok((id, role)) => Ok((id, role)),
-            Err(_) => Err("Invalid token"),
+            Err(e) => Err(ServiceError::unauthorized("Invalid token", Some(e))),
         }
     }
 
@@ -115,7 +121,7 @@ impl Jwt {
         &self,
         token_type: TokenType,
         token: &str,
-    ) -> Result<(i32, i16, &str), &str> {
+    ) -> Result<(i32, i16, &str, i64), ServiceError> {
         match email_token::Claims::decode_token(
             match token_type {
                 TokenType::Reset => &self.reset.secret,
@@ -124,9 +130,13 @@ impl Jwt {
             },
             token,
         ) {
-            Ok((id, version, token_id)) => Ok((id, version, token_id)),
-            Err(_) => Err("Invalid token"),
+            Ok((id, version, token_id, exp)) => Ok((id, version, token_id, exp)),
+            Err(e) => Err(ServiceError::unauthorized("Invalid token", Some(e))),
         }
+    }
+
+    pub fn get_refresh_name(&self) -> &str {
+        &self.refresh_name
     }
 
     pub fn get_access_token_time(&self) -> i64 {
@@ -141,7 +151,8 @@ impl Jwt {
         }
     }
 
-    pub fn generate_auth_tokens(&self, user: &Model) -> Result<(String, String), String> {
+    pub fn generate_auth_tokens(&self, user: &Model) -> Result<(String, String), ServiceError> {
+        tracing::trace_span!("Generating authentication tokens", id = %user.id);
         let access_token = self.generate_access_token(user)?;
         let refresh_token = self.generate_email_token(TokenType::Refresh, user)?;
         Ok((access_token, refresh_token))

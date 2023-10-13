@@ -8,5 +8,6 @@ pub use enums::*;
 
 pub mod bodies;
 pub mod enums;
-pub mod responses;
+pub mod objects;
 pub mod queries;
+pub mod responses;
