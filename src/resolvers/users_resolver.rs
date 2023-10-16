@@ -14,6 +14,8 @@ use entities::enums::{CursorEnum, OrderEnum};
 use entities::helpers::GQLAfter;
 use entities::user;
 
+use crate::guards::AuthGuard;
+use crate::helpers::AccessUser;
 use crate::providers::Database;
 use crate::services::users_service;
 
@@ -51,5 +53,12 @@ impl UsersQuery {
     async fn user_by_username(&self, ctx: &Context<'_>, username: String) -> Result<user::Model> {
         let db = ctx.data::<Database>()?;
         Ok(users_service::find_one_by_username(db, &username).await?)
+    }
+
+    #[graphql(guard = "AuthGuard")]
+    async fn me(&self, ctx: &Context<'_>) -> Result<user::Model> {
+        let db = ctx.data::<Database>()?;
+        let user = AccessUser::get_access_user(ctx)?;
+        Ok(users_service::find_one_by_id(db, user.id).await?)
     }
 }

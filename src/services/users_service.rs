@@ -11,15 +11,15 @@ use sea_orm::{
     TransactionTrait,
 };
 
+use entities::helpers::GQLFilter;
 use entities::{
     enums::{CursorEnum, OAuthProviderEnum, OrderEnum},
     oauth_provider,
     user::{ActiveModel, Entity, Model},
 };
-use entities::helpers::GQLFilter;
 
 use crate::common::{ServiceError, INVALID_CREDENTIALS, SOMETHING_WENT_WRONG};
-use crate::providers::Database;
+use crate::providers::{Database, ObjectStorage};
 
 use super::helpers::hash_password;
 
@@ -48,7 +48,7 @@ pub async fn create_user(
         }
 
         password = hash_password(&password)
-            .map_err(|e| ServiceError::internal_server_error("Could not hash password", Some(e)))?;
+            .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     }
 
     let date_of_birth = NaiveDate::parse_from_str(&date_of_birth, "%Y-%m-%d")
@@ -146,7 +146,7 @@ pub async fn find_or_create(
 }
 
 pub async fn find_one_by_id(db: &Database, id: i32) -> Result<Model, ServiceError> {
-    tracing::info_span!("users_service::find_one_by_id");
+    tracing::info_span!("users_service::find_one_by_id", %id);
     let user = Entity::find_by_id(id).one(db.get_connection()).await?;
 
     match user {
@@ -198,6 +198,15 @@ pub async fn find_one_by_version(
     }
 }
 
+pub async fn update_picture(
+    db: &Database,
+    os: &ObjectStorage,
+    id: i32,
+    upload: Vec<u8>,
+) -> Result<Model, ServiceError> {
+    todo!()
+}
+
 pub async fn delete_user(db: &Database, id: i32) -> Result<(), ServiceError> {
     let user = find_one_by_id(db, id).await?;
     let result = user.delete(db.get_connection()).await?;
@@ -221,13 +230,9 @@ pub async fn query(
     search: Option<String>,
 ) -> Result<(Vec<Model>, u64, u64), ServiceError> {
     let (select, inverse_select) = Entity::filter(order, cursor, after, search);
-    let users = select
-        .clone()
-        .limit(limit)
-        .all(db.get_connection())
-        .await?;
+    let users = select.clone().limit(limit).all(db.get_connection()).await?;
     let count = select.count(db.get_connection()).await?;
-    let previous_count = match inverse_select { 
+    let previous_count = match inverse_select {
         Some(select) => select.count(db.get_connection()).await?,
         None => 0,
     };

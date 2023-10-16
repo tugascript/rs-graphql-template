@@ -17,12 +17,13 @@ use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 
 use crate::common::AuthTokens;
 use crate::providers::{Database, Jwt, ObjectStorage};
+use crate::resolvers::users_resolver::UsersQuery;
 
 #[derive(MergedObject, Default)]
 pub struct MutationRoot;
 
 #[derive(MergedObject, Default)]
-pub struct QueryRoot;
+pub struct QueryRoot(UsersQuery);
 
 pub fn build_schema(
     database: &Database,

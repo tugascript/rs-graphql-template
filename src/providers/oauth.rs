@@ -18,11 +18,21 @@ pub enum ExternalProvider {
     Facebook,
 }
 
+const GOOGLE: &'static str = "google";
+const FACEBOOK: &'static str = "facebook";
+
 impl ExternalProvider {
+    pub fn to_str(&self) -> &str {
+        match self {
+            ExternalProvider::Google => GOOGLE,
+            ExternalProvider::Facebook => FACEBOOK,
+        }
+    }
+
     pub fn from_str(provider: &str) -> Option<Self> {
         match provider {
-            "google" => Some(Self::Google),
-            "facebook" => Some(Self::Facebook),
+            GOOGLE => Some(Self::Google),
+            FACEBOOK => Some(Self::Facebook),
             _ => None,
         }
     }

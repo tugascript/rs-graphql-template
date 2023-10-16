@@ -6,30 +6,29 @@
 
 use anyhow::Error;
 use bcrypt::{hash, verify};
-use chrono::{Duration, NaiveDateTime, Utc};
 use oauth2::{
     reqwest::async_http_client, AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier,
     Scope, TokenResponse,
 };
 use rand::Rng;
+use redis::AsyncCommands;
 use reqwest::Client;
+use sea_orm::ActiveModelTrait;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, PaginatorTrait};
 
-use entities::{
-    access_code, csrf_token, enums::oauth_provider_enum::OAuthProviderEnum, oauth_provider,
-    token_blacklist, user,
-};
+use entities::{enums::oauth_provider_enum::OAuthProviderEnum, oauth_provider, user};
 
 use crate::common::{
     InternalCause, ServiceError, CONFLICT_STATUS_CODE, INVALID_CREDENTIALS, NOT_FOUND_STATUS_CODE,
     SOMETHING_WENT_WRONG,
 };
 use crate::dtos::{bodies, queries, responses};
-use crate::providers::{Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
+use crate::providers::{Cache, Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
 use crate::services::helpers::hash_password;
 
 use super::{helpers::verify_password, users_service};
+
+const BLACKLIST_TOKEN: &'static str = "blacklist_token";
 
 fn generate_random_code() -> String {
     let mut code = String::new();
@@ -77,46 +76,42 @@ async fn find_oauth_provider(
 }
 
 async fn create_code(
-    db: &Database,
+    cache: &Cache,
     user_id: i32,
     email: &str,
     code_hash: String,
-    expires_in: i64,
+    exp: i64,
 ) -> Result<(), ServiceError> {
     tracing::trace_span!("Creating two factor code", id = %user_id);
-    access_code::ActiveModel {
-        user_email: Set(email.to_string()),
-        code: Set(code_hash),
-        expires_at: Set((Utc::now() + Duration::seconds(expires_in)).naive_utc()),
-        ..Default::default()
-    }
-    .insert(db.get_connection())
-    .await?;
+    let exp_usize = usize::try_from(exp)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    let mut connection = cache.get_connection().await?;
+    connection
+        .set_ex(format!("access_code:{}", email), code_hash, exp_usize)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     Ok(())
 }
 
-async fn find_code(db: &'_ Database, email: &str) -> Result<access_code::Model, ServiceError> {
-    let code = access_code::Entity::find_by_user(email)
-        .one(db.get_connection())
-        .await?;
-    if let Some(code) = code {
-        Ok(code)
-    } else {
-        Err(ServiceError::not_found::<Error>("Code not found", None))
-    }
-}
-
-async fn validate_code(db: &Database, email: &str, code: &str) -> Result<(), ServiceError> {
-    let access_code = find_code(db, email).await?;
-    if verify_code(code, &access_code.code) {
-        if access_code.expires_at > Utc::now().naive_utc() {
-            Ok(())
-        } else {
-            Err(ServiceError::unauthorized::<Error>("Code expired", None))
+async fn validate_code(cache: &Cache, email: &str, code: &str) -> Result<(), ServiceError> {
+    let key = format!("access_code:{}", email);
+    let mut connection = cache.get_connection().await?;
+    let hashed_code: Option<String> = connection
+        .get(&key)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    if let Some(hashed_code) = hashed_code {
+        if verify_code(code, &hashed_code) {
+            connection
+                .del(&key)
+                .await
+                .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+            return Ok(());
         }
-    } else {
-        Err(ServiceError::unauthorized::<Error>("Invalid code", None))
+
+        return Err(ServiceError::unauthorized::<Error>("Invalid code", None));
     }
+    Err(ServiceError::unauthorized::<Error>("Code expired", None))
 }
 
 pub async fn sign_up(
@@ -177,6 +172,7 @@ pub async fn confirm_email(
 
 pub async fn sign_in(
     db: &Database,
+    cache: &Cache,
     jwt: &Jwt,
     mailer: &Mailer,
     body: bodies::SignIn,
@@ -213,7 +209,7 @@ pub async fn sign_in(
         tracing::trace_span!("Two factor authentication enabled", id = %user.id);
         let (code, code_hash) = generate_email_code()?;
         create_code(
-            db,
+            cache,
             user.id,
             &body.email,
             code_hash,
@@ -236,11 +232,13 @@ pub async fn sign_in(
 
 pub async fn confirm_sign_in(
     db: &Database,
+    cache: &Cache,
     jwt: &Jwt,
     body: bodies::ConfirmSignIn,
 ) -> Result<responses::Auth, ServiceError> {
-    let user = users_service::find_one_by_email(db, &body.email).await?;
-    validate_code(db, &body.email, &body.code).await?;
+    let email = body.email.to_lowercase();
+    let user = users_service::find_one_by_email(db, &email).await?;
+    validate_code(cache, &email, &body.code).await?;
     let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
     Ok(responses::Auth::new(
         access_token,
@@ -249,21 +247,26 @@ pub async fn confirm_sign_in(
     ))
 }
 
-async fn check_blacklist(db: &Database, token_id: &str) -> Result<bool, ServiceError> {
-    let count = token_blacklist::Entity::find_by_id(token_id)
-        .count(db.get_connection())
-        .await?;
-    Ok(count > 0)
+async fn check_blacklist(cache: &Cache, token_id: &str) -> Result<bool, ServiceError> {
+    let mut connection = cache.get_connection().await?;
+    let key = format!("{}:{}", BLACKLIST_TOKEN, token_id);
+    let value: Option<i32> = connection
+        .get(&key)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    Ok(value.is_some())
 }
 
 pub async fn refresh_token(
     db: &Database,
+    cache: &Cache,
     jwt: &Jwt,
     refresh_token: &str,
 ) -> Result<responses::Auth, ServiceError> {
-    let (id, version, token_id, _) = jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
+    let (id, version, token_id, exp) =
+        jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
 
-    if check_blacklist(db, &token_id).await? {
+    if check_blacklist(cache, &token_id).await? {
         return Err(ServiceError::unauthorized(
             "Invalid token",
             Some(InternalCause::new("Token is blacklisted")),
@@ -272,6 +275,7 @@ pub async fn refresh_token(
 
     let user = users_service::find_one_by_version(db, id, version).await?;
     let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
+    create_blacklisted_token(cache, id, &token_id, exp).await?;
     return Ok(responses::Auth::new(
         access_token,
         refresh_token,
@@ -339,79 +343,62 @@ pub async fn reset_password(
 }
 
 async fn create_blacklisted_token(
-    db: &Database,
+    cache: &Cache,
     user_id: i32,
     token_id: &str,
     exp: i64,
 ) -> Result<(), ServiceError> {
     tracing::trace_span!("Creating blacklisted token", id = %user_id);
-    let expires_at = match NaiveDateTime::from_timestamp_opt(exp, 0) {
-        Some(date) => date,
-        None => {
-            return Err(ServiceError::internal_server_error(
-                SOMETHING_WENT_WRONG,
-                Some(InternalCause::new("Failed to parse token expiration date")),
-            ));
-        }
-    };
-    token_blacklist::ActiveModel {
-        id: Set(token_id.to_string()),
-        user_id: Set(user_id),
-        expires_at: Set(expires_at),
-        ..Default::default()
-    }
-    .insert(db.get_connection())
-    .await?;
+    let exp_usize = usize::try_from(exp)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    let mut connection = cache.get_connection().await?;
+    let key = format!("{}:{}", BLACKLIST_TOKEN, token_id);
+    connection
+        .set_ex(&key, user_id, exp_usize)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     Ok(())
 }
 
-pub async fn sign_out(db: &Database, jwt: &Jwt, refresh_token: &str) -> Result<(), ServiceError> {
+pub async fn sign_out(cache: &Cache, jwt: &Jwt, refresh_token: &str) -> Result<(), ServiceError> {
     let (id, _, token_id, exp) = jwt.verify_email_token(TokenType::Refresh, refresh_token)?;
 
-    if check_blacklist(db, &token_id).await? {
-        return Err(ServiceError::unauthorized(
-            "Invalid token",
-            Some(InternalCause::new("Token is blacklisted")),
-        ));
+    if check_blacklist(cache, &token_id).await? {
+        return Ok(());
     }
-    create_blacklisted_token(db, id, &token_id, exp).await?;
+    create_blacklisted_token(cache, id, &token_id, exp).await?;
     return Ok(());
 }
 
 async fn save_csrf_token(
-    db: &Database,
+    cache: &Cache,
     provider: &ExternalProvider,
     token: &str,
     verifier: &str,
 ) -> Result<(), ServiceError> {
-    csrf_token::ActiveModel {
-        token: Set(token.to_string()),
-        verifier: Set(verifier.to_string()),
-        provider: Set(provider.to_oauth_provider()),
-        ..Default::default()
-    }
-    .insert(db.get_connection())
-    .await?;
+    let mut connection = cache.get_connection().await?;
+    let key = format!("{}:{}", provider.to_str(), token);
+    connection
+        .set_ex(&key, verifier, 300)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     Ok(())
 }
 
 async fn get_csrf_token(
-    db: &Database,
+    cache: &Cache,
     provider: &ExternalProvider,
     token: &str,
-) -> Result<(String, String), ServiceError> {
-    let csrf_token = csrf_token::Entity::find_token(provider.to_oauth_provider(), token)
-        .one(db.get_connection())
-        .await?;
-    if let Some(csrf_token) = csrf_token {
-        if csrf_token.created_at + Duration::minutes(5) > Utc::now().naive_utc() {
-            return Err(ServiceError::unauthorized::<Error>(
-                "Token has expired",
-                None,
-            ));
-        }
+) -> Result<String, ServiceError> {
+    let mut connection = cache.get_connection().await?;
+    let key = format!("{}:{}", provider.to_str(), token);
+    let verifier: Option<String> = connection
+        .get(&key)
+        .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
 
-        return Ok((csrf_token.token, csrf_token.verifier));
+    if let Some(verifier) = verifier {
+        return Ok(verifier);
     }
 
     Err(ServiceError::unauthorized(
@@ -421,7 +408,7 @@ async fn get_csrf_token(
 }
 
 pub async fn oauth_sign_in(
-    db: &Database,
+    cache: &Cache,
     oauth: &OAuth,
     provider: ExternalProvider,
 ) -> Result<String, ServiceError> {
@@ -435,26 +422,20 @@ pub async fn oauth_sign_in(
     }
 
     let (url, token) = request.set_pkce_challenge(pkce_code_challenge).url();
-    save_csrf_token(db, &provider, token.secret(), pkce_code_verifier.secret()).await?;
+    save_csrf_token(cache, &provider, token.secret(), pkce_code_verifier.secret()).await?;
     Ok(url.to_string())
 }
 
 pub async fn oauth_callback(
     db: &Database,
+    cache: &Cache,
     oauth: &OAuth,
     jwt: &Jwt,
     provider: ExternalProvider,
     query: queries::OAuth,
 ) -> Result<responses::Auth, ServiceError> {
     let client = oauth.get_external_client(&provider)?;
-    let (token, verifier) = get_csrf_token(db, &provider, &query.state).await?;
-
-    if token != query.state {
-        return Err(ServiceError::unauthorized(
-            "Invalid credentials",
-            Some(InternalCause::new("Invalid state")),
-        ));
-    }
+    let verifier = get_csrf_token(cache, &provider, &query.state).await?;
 
     let token_response = client
         .exchange_code(AuthorizationCode::new(query.code))

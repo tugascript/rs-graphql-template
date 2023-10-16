@@ -11,7 +11,7 @@ use anyhow::Error;
 use tracing_actix_web::TracingLogger;
 
 use crate::controllers::auth_controller::auth_router;
-use crate::providers::{Database, Jwt, Mailer, OAuth, ObjectStorage};
+use crate::providers::{Cache, Database, Jwt, Mailer, OAuth, ObjectStorage};
 use crate::startup::schema_builder::graphql_router;
 
 use super::schema_builder::build_schema;
@@ -26,6 +26,7 @@ impl App {
         let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
         let db = Database::new().await?;
+        let cache = Cache::new();
         let jwt = Jwt::new();
         let mailer = Mailer::new();
         let oauth = OAuth::new();
@@ -39,6 +40,7 @@ impl App {
                 .app_data(web::Data::new(schema.clone()))
                 .app_data(web::Data::new(oauth.clone()))
                 .app_data(web::Data::new(db.clone()))
+                .app_data(web::Data::new(cache.clone()))
                 .app_data(web::Data::new(jwt.clone()))
                 .app_data(web::Data::new(mailer.clone()))
                 .service(auth_router())

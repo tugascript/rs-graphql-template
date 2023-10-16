@@ -7,6 +7,7 @@
 mod common;
 mod controllers;
 mod dtos;
+mod guards;
 mod helpers;
 mod providers;
 mod resolvers;

@@ -12,7 +12,7 @@ use actix_web::{
 
 use crate::common::{AuthTokens, InternalCause, ServiceError};
 use crate::dtos::{bodies, queries, responses};
-use crate::providers::{Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
+use crate::providers::{Cache, Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
 use crate::services::auth_service;
 
 fn save_refresh_token(
@@ -62,12 +62,21 @@ async fn confirm_email(
 
 async fn sign_in(
     db: web::Data<Database>,
+    cache: web::Data<Cache>,
     jwt: web::Data<Jwt>,
     mailer: web::Data<Mailer>,
     body: web::Json<bodies::SignIn>,
 ) -> Result<HttpResponse, ServiceError> {
     let jwt_ref = jwt.get_ref();
-    match auth_service::sign_in(db.get_ref(), jwt_ref, mailer.get_ref(), body.into_inner()).await? {
+    match auth_service::sign_in(
+        db.get_ref(),
+        cache.get_ref(),
+        jwt_ref,
+        mailer.get_ref(),
+        body.into_inner(),
+    )
+    .await?
+    {
         responses::SignIn::Auth(auth_response) => Ok(save_refresh_token(
             jwt_ref.get_refresh_name(),
             jwt_ref.get_email_token_time(TokenType::Refresh),
@@ -81,6 +90,7 @@ async fn sign_in(
 
 async fn confirm_sign_in(
     db: web::Data<Database>,
+    cache: web::Data<Cache>,
     jwt: web::Data<Jwt>,
     body: web::Json<bodies::ConfirmSignIn>,
 ) -> Result<HttpResponse, ServiceError> {
@@ -88,7 +98,8 @@ async fn confirm_sign_in(
     Ok(save_refresh_token(
         jwt_ref.get_refresh_name(),
         jwt_ref.get_email_token_time(TokenType::Refresh),
-        auth_service::confirm_sign_in(db.get_ref(), jwt_ref, body.into_inner()).await?,
+        auth_service::confirm_sign_in(db.get_ref(), cache.get_ref(), jwt_ref, body.into_inner())
+            .await?,
     ))
 }
 
@@ -114,7 +125,7 @@ async fn reset_password(
 
 async fn sign_out(
     auth_token: AuthTokens,
-    db: web::Data<Database>,
+    cache: web::Data<Cache>,
     jwt: web::Data<Jwt>,
     body: web::Json<Option<bodies::RefreshToken>>,
 ) -> Result<HttpResponse, ServiceError> {
@@ -131,16 +142,16 @@ async fn sign_out(
             }
         }
     };
-    auth_service::sign_out(db.get_ref(), jwt.get_ref(), &refresh_token).await?;
+    auth_service::sign_out(cache.get_ref(), jwt.get_ref(), &refresh_token).await?;
     Ok(HttpResponse::NoContent().finish())
 }
 
 async fn facebook_sign_in(
-    db: web::Data<Database>,
+    cache: web::Data<Cache>,
     oauth: web::Data<OAuth>,
 ) -> Result<HttpResponse, ServiceError> {
     let url =
-        auth_service::oauth_sign_in(db.get_ref(), oauth.get_ref(), ExternalProvider::Facebook)
+        auth_service::oauth_sign_in(cache.get_ref(), oauth.get_ref(), ExternalProvider::Facebook)
             .await?;
     Ok(HttpResponse::TemporaryRedirect()
         .insert_header((LOCATION, url))
@@ -149,12 +160,14 @@ async fn facebook_sign_in(
 
 async fn facebook_callback(
     db: web::Data<Database>,
+    cache: web::Data<Cache>,
     oauth: web::Data<OAuth>,
     jwt: web::Data<Jwt>,
     query: web::Query<queries::OAuth>,
 ) -> Result<HttpResponse, ServiceError> {
     let data = auth_service::oauth_callback(
         db.get_ref(),
+        cache.get_ref(),
         oauth.get_ref(),
         jwt.get_ref(),
         ExternalProvider::Facebook,
@@ -165,11 +178,12 @@ async fn facebook_callback(
 }
 
 async fn google_sign_in(
-    db: web::Data<Database>,
+    cache: web::Data<Cache>,
     oauth: web::Data<OAuth>,
 ) -> Result<HttpResponse, ServiceError> {
-    let url = auth_service::oauth_sign_in(db.get_ref(), oauth.get_ref(), ExternalProvider::Google)
-        .await?;
+    let url =
+        auth_service::oauth_sign_in(cache.get_ref(), oauth.get_ref(), ExternalProvider::Google)
+            .await?;
     Ok(HttpResponse::TemporaryRedirect()
         .insert_header((LOCATION, url))
         .finish())
@@ -177,12 +191,14 @@ async fn google_sign_in(
 
 async fn google_callback(
     db: web::Data<Database>,
+    cache: web::Data<Cache>,
     oauth: web::Data<OAuth>,
     jwt: web::Data<Jwt>,
     query: web::Query<queries::OAuth>,
 ) -> Result<HttpResponse, ServiceError> {
     let data = auth_service::oauth_callback(
         db.get_ref(),
+        cache.get_ref(),
         oauth.get_ref(),
         jwt.get_ref(),
         ExternalProvider::Google,

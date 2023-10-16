@@ -10,21 +10,26 @@ use std::{
     io::{Cursor, Read},
 };
 
+use anyhow::Error as AnyHowError;
 use async_graphql::{Context, Error, Upload};
 use image::{GenericImageView, ImageOutputFormat::Jpeg};
+use sea_orm::{ActiveModelTrait, Set};
 use uuid::Uuid;
 
-use crate::{
-    dtos::ratio::Ratio,
-    providers::{Jwt, ObjectStorage},
-    startup::AuthTokens,
-};
+use entities::uploaded_file::{ActiveModel, Entity, Model};
 
-use super::helpers::AccessUser;
+use crate::common::{InternalCause, ServiceError, SOMETHING_WENT_WRONG};
+use crate::helpers::AccessUser;
+use crate::providers::Database;
+use crate::{dtos::ratio::Ratio, providers::ObjectStorage};
 
-fn load_file_data(mut file: File) -> Result<Vec<u8>, Error> {
+type ImageData = Vec<u8>;
+type ImageId = String;
+
+fn load_file_data(mut file: File) -> Result<Vec<u8>, ServiceError> {
     let mut buffer = Vec::<u8>::new();
-    file.read_to_end(&mut buffer).map_err(|_| Error::from(""))?;
+    file.read_to_end(&mut buffer)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     Ok(buffer)
 }
 
@@ -32,16 +37,24 @@ fn image_processor(
     ctx: &Context<'_>,
     file: Upload,
     ratio: Ratio,
-) -> Result<(String, Vec<u8>), Error> {
-    let file_info = file.value(ctx).map_err(|_| Error::from(""))?;
-    let file_type = file_info.content_type.ok_or(Error::from(""))?;
+) -> Result<(ImageId, ImageData), ServiceError> {
+    let file_info = file
+        .value(ctx)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    let file_type = file_info
+        .content_type
+        .ok_or(ServiceError::internal_server_error(
+            SOMETHING_WENT_WRONG,
+            Some(InternalCause::new("File does not have content_type")),
+        ))?;
 
     if !file_type.contains("image") {
-        return Err(Error::from("File is not an image"));
+        return Err(ServiceError::bad_request::<AnyHowError>("File is not an image", None).into());
     }
 
     let image_data = load_file_data(file_info.content)?;
-    let image_control = image::load_from_memory(&image_data).map_err(|_| Error::from(""))?;
+    let image_control = image::load_from_memory(&image_data)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     let (width, height) = image_control.dimensions();
 
     let cropped_image = match ratio {
@@ -77,20 +90,54 @@ fn image_processor(
 
     cropped_image
         .write_to(&mut compressed_buffer, Jpeg(80))
-        .map_err(|_| Error::from(""))?;
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
 
-    let image_id = Uuid::new_v4().to_string().replace("-", "");
-    let image_name = format!("{}.jpg", image_id);
-    Ok((image_name, compressed_buffer.into_inner()))
+    Ok((Uuid::new_v4().to_string(), compressed_buffer.into_inner()))
 }
 
-pub async fn upload_image(ctx: &Context<'_>, file: Upload, ratio: Ratio) -> Result<String, Error> {
-    let (image_key, image_data) = image_processor(ctx, file, ratio)?;
-    let tokens = ctx.data::<AuthTokens>()?;
-    let jwt = ctx.data::<Jwt>()?;
-    let access_user = AccessUser::get_access_user(tokens, jwt)?;
+pub async fn upload_image(
+    ctx: &Context<'_>,
+    user_id: Option<i32>,
+    file: Upload,
+    ratio: Ratio,
+) -> Result<Model, Error> {
+    tracing::info_span!("uploader_service::upload_image");
+    let user_id = match user_id {
+        Some(access_user) => access_user,
+        None => AccessUser::get_access_user(ctx)?.id,
+    };
     let file_storage = ctx.data::<ObjectStorage>()?;
-    file_storage
-        .upload_file(&access_user.id.to_string(), &image_key, image_data)
+    let db = ctx.data::<Database>()?;
+    let (image_id, image_data) = image_processor(ctx, file, ratio)?;
+    let url = file_storage
+        .upload_file(user_id, &image_id, image_data)
+        .await?;
+    let uploaded_file = ActiveModel {
+        id: Set(image_id),
+        user_id: Set(user_id),
+        url: Set(url),
+        extension: Set("png".to_string()),
+        ..Default::default()
+    }
+    .insert(db.get_connection())
+    .await?;
+    Ok(uploaded_file)
+}
+
+pub async fn find_one_by_id(db: &Database, id: &str) -> Result<Model, ServiceError> {
+    tracing::info_span!("uploader_service::find_one_by_id", %id);
+    let uploaded_file = Entity::find_by_id(id)
+        .one(db.get_connection())
         .await
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+
+    if let Some(file) = uploaded_file {
+        tracing::info_span!("File found");
+        return Ok(file);
+    }
+
+    Err(ServiceError::not_found::<AnyHowError>(
+        "File not found",
+        None,
+    ))
 }

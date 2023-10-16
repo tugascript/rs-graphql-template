@@ -5,27 +5,28 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use chrono::Utc;
-use sea_orm::{entity::prelude::*, ActiveValue, Order, QueryOrder};
+use sea_orm::{entity::prelude::*, ActiveValue};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "access_codes")]
+#[sea_orm(table_name = "uploaded_files")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
+    #[sea_orm(primary_key, column_type = "Uuid")]
+    pub id: String,
     #[sea_orm(column_type = "String(Some(200))")]
-    pub user_email: String,
-    #[sea_orm(column_type = "String(Some(60))")]
-    pub code: String,
-    pub expires_at: DateTime,
+    pub url: String,
+    pub user_id: i32,
+    #[sea_orm(column_type = "String(Some(10))")]
+    pub extension: String,
     pub created_at: DateTime,
+    pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
         belongs_to = "super::user::Entity",
-        from = "Column::UserEmail",
-        to = "super::user::Column::Email"
+        from = "Column::UserId",
+        to = "super::user::Column::Id"
     )]
     User,
 }
@@ -40,6 +41,7 @@ impl Related<super::user::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {
     async fn before_save<C: ConnectionTrait>(mut self, _: &C, insert: bool) -> Result<Self, DbErr> {
         let current_time = Utc::now().naive_utc();
+        self.updated_at = ActiveValue::Set(current_time);
         if insert {
             self.created_at = ActiveValue::Set(current_time);
         }
@@ -48,9 +50,7 @@ impl ActiveModelBehavior for ActiveModel {
 }
 
 impl Entity {
-    pub fn find_by_user(user_email: &str) -> Select<Entity> {
-        Entity::find()
-            .filter(Column::UserEmail.eq(user_email))
-            .order_by(Column::Id, Order::Desc)
+    pub fn find_by_id(id: &str) -> Select<Entity> {
+        Entity::find().filter(Column::Id.eq(id))
     }
 }

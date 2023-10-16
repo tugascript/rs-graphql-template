@@ -6,10 +6,11 @@
 
 use std::env;
 
-use async_graphql::Error;
 use rusoto_core::{credential::StaticProvider, HttpClient, Region};
 use rusoto_s3::{PutObjectRequest, S3Client, S3};
 use uuid::Uuid;
+
+use crate::common::{ServiceError, INTERNAL_SERVER_ERROR};
 
 #[derive(Clone)]
 pub struct ObjectStorage {
@@ -50,17 +51,12 @@ impl ObjectStorage {
 
     pub async fn upload_file(
         &self,
-        user_id: &str,
+        user_id: i32,
         file_key: &str,
         file_contents: Vec<u8>,
-    ) -> Result<String, Error> {
-        let combined_key = format!(
-            "{}/{}",
-            Uuid::new_v5(&self.namespace, user_id.as_bytes())
-                .to_string()
-                .replace("-", ""),
-            file_key
-        );
+    ) -> Result<String, ServiceError> {
+        let user_prefix = Uuid::new_v5(&self.namespace, user_id.to_string().as_bytes()).to_string();
+        let combined_key = format!("{}/{}", &user_prefix, file_key);
         let request = PutObjectRequest {
             bucket: self.bucket.to_string(),
             key: combined_key.clone(),
@@ -70,11 +66,11 @@ impl ObjectStorage {
         self.client
             .put_object(request)
             .await
-            .map_err(|_| Error::from("Something went wrong uploading the file"))?;
+            .map_err(|e| ServiceError::internal_server_error(INTERNAL_SERVER_ERROR, Some(e)))?;
         Ok(format!("{}/{}", self.endpoint, combined_key))
     }
 
-    pub async fn delete_file(&self, file_key: &str) -> Result<(), Error> {
+    pub async fn delete_file(&self, file_key: &str) -> Result<(), ServiceError> {
         let request = rusoto_s3::DeleteObjectRequest {
             bucket: self.bucket.to_string(),
             key: file_key.to_string(),
@@ -83,7 +79,11 @@ impl ObjectStorage {
         self.client
             .delete_object(request)
             .await
-            .map_err(|_| Error::from("Something went wrong deleting the file"))?;
+            .map_err(|e| ServiceError::internal_server_error(INTERNAL_SERVER_ERROR, Some(e)))?;
         Ok(())
+    }
+
+    pub fn get_user_prefix(&self, user_id: i32) -> String {
+        Uuid::new_v5(&self.namespace, user_id.to_string().as_bytes()).to_string()
     }
 }

@@ -30,7 +30,7 @@ pub struct Model {
     pub date_of_birth: chrono::NaiveDate,
     #[sea_orm(column_type = "String(Some(5))", default = "USER")]
     pub role: RoleEnum,
-    #[sea_orm(column_type = "String(Some(200))", nullable)]
+    #[sea_orm(column_type = "Uuid", nullable)]
     pub picture: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub description: Option<String>,
@@ -50,7 +50,28 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::oauth_provider::Entity")]
+    OAuthProvider,
+    #[sea_orm(
+        belongs_to = "super::uploaded_file::Entity",
+        from = "Column::Picture",
+        to = "super::uploaded_file::Column::Id"
+    )]
+    Picture,
+}
+
+impl Related<super::oauth_provider::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::OAuthProvider.def()
+    }
+}
+
+impl Related<super::uploaded_file::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Picture.def()
+    }
+}
 
 #[async_trait::async_trait]
 impl ActiveModelBehavior for ActiveModel {
