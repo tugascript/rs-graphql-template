@@ -63,7 +63,7 @@ impl Claims {
         )
     }
 
-    pub fn decode_token<'a>(secret: &'a str, token: &'a str) -> Result<(i32, i16, &'a str, i64)> {
+    pub fn decode_token(secret: &str, token: &str) -> Result<(i32, i16, String, i64)> {
         let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
@@ -72,7 +72,7 @@ impl Claims {
         Ok((
             token_data.claims.user.id,
             token_data.claims.user.version,
-            &token_data.claims.user.token_id,
+            token_data.claims.user.token_id,
             token_data.claims.exp,
         ))
     }

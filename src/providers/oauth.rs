@@ -29,14 +29,6 @@ impl ExternalProvider {
         }
     }
 
-    pub fn from_str(provider: &str) -> Option<Self> {
-        match provider {
-            GOOGLE => Some(Self::Google),
-            FACEBOOK => Some(Self::Facebook),
-            _ => None,
-        }
-    }
-
     pub fn to_oauth_provider(&self) -> OAuthProviderEnum {
         match self {
             ExternalProvider::Google => OAuthProviderEnum::Google,
@@ -56,7 +48,6 @@ pub struct OAuth {
     google: ClientCredentials,
     facebook: ClientCredentials,
     url: String,
-    secret: String,
 }
 
 impl OAuth {
@@ -65,14 +56,11 @@ impl OAuth {
         let facebook = Self::build_facebook();
         let backend_url =
             env::var("BACKEND_URL").expect("Missing the BACKEND_URL environment variable.");
-        let secret =
-            env::var("OAUTH_SECRET").expect("Missing the OAUTH_SECRET environment variable.");
 
         Self {
             google,
             facebook,
             url: format!("{}/api/auth/ext", backend_url),
-            secret,
         }
     }
 

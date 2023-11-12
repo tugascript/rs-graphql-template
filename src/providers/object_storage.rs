@@ -61,6 +61,7 @@ impl ObjectStorage {
             bucket: self.bucket.to_string(),
             key: combined_key.clone(),
             body: Some(file_contents.into()),
+            acl: Some("public-read".to_string()),
             ..Default::default()
         };
         self.client

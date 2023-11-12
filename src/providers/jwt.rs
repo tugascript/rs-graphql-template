@@ -26,8 +26,8 @@ pub enum TokenType {
     Refresh,
 }
 
-impl ToString for TokenType {
-    fn to_string(&self) -> String {
+impl TokenType {
+    pub fn to_string(&self) -> String {
         match self {
             TokenType::Reset => "reset".to_string(),
             TokenType::Confirmation => "confirmation".to_string(),
@@ -121,7 +121,7 @@ impl Jwt {
         &self,
         token_type: TokenType,
         token: &str,
-    ) -> Result<(i32, i16, &str, i64), ServiceError> {
+    ) -> Result<(i32, i16, String, i64), ServiceError> {
         match email_token::Claims::decode_token(
             match token_type {
                 TokenType::Reset => &self.reset.secret,
