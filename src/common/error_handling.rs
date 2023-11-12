@@ -45,7 +45,7 @@ pub const INVALID_CREDENTIALS: &'static str = "Invalid credentials";
 
 impl ServiceError {
     pub fn to_str_name(&self) -> &'static str {
-        match self { 
+        match self {
             ServiceError::InternalServerError(_) => INTERNAL_SERVER_ERROR,
             ServiceError::BadRequest(_) => BAD_REQUEST,
             ServiceError::Unauthorized(_) => UNAUTHORIZED,
@@ -54,9 +54,9 @@ impl ServiceError {
             ServiceError::Conflict(_) => CONFLICT,
         }
     }
-    
+
     pub fn get_status_code(&self) -> u16 {
-        match self { 
+        match self {
             ServiceError::InternalServerError(_) => INTERNAL_SERVER_ERROR_STATUS_CODE,
             ServiceError::BadRequest(_) => BAD_REQUEST_STATUS_CODE,
             ServiceError::Unauthorized(_) => UNAUTHORIZED_STATUS_CODE,
@@ -65,7 +65,7 @@ impl ServiceError {
             ServiceError::Conflict(_) => CONFLICT_STATUS_CODE,
         }
     }
-    
+
     pub fn internal_server_error<T: std::fmt::Display + std::fmt::Debug>(
         message: &str,
         cause: Option<T>,

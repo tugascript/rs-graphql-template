@@ -6,7 +6,20 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::common::{validate_jwt, validations_handler, ServiceError};
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConfirmEmail {
     pub confirmation_token: String,
+}
+
+impl ConfirmEmail {
+    pub fn validate(self) -> Result<Self, ServiceError> {
+        let validations = [validate_jwt(
+            "Confirmation token",
+            &self.confirmation_token,
+        )?];
+        validations_handler(&validations)?;
+        Ok(self)
+    }
 }

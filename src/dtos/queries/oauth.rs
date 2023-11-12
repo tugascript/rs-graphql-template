@@ -6,8 +6,21 @@
 
 use serde::Deserialize;
 
+use crate::common::{validate_not_empty, validations_handler, ServiceError};
+
 #[derive(Debug, Deserialize)]
 pub struct OAuth {
     pub code: String,
     pub state: String,
+}
+
+impl OAuth {
+    pub fn validate(self) -> Result<Self, ServiceError> {
+        let validations = [
+            validate_not_empty("Code", &self.code),
+            validate_not_empty("State", &self.state),
+        ];
+        validations_handler(&validations)?;
+        Ok(self)
+    }
 }

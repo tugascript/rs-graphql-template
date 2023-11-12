@@ -6,7 +6,17 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::common::{validate_email, validations_handler, ServiceError};
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Email {
     pub email: String,
+}
+
+impl Email {
+    pub fn validate(self) -> Result<Self, ServiceError> {
+        let validations = [validate_email(&self.email)?];
+        validations_handler(&validations)?;
+        Ok(self)
+    }
 }
