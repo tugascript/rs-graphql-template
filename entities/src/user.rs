@@ -4,16 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use async_graphql::*;
 use chrono::Utc;
 use sea_orm::{entity::prelude::*, ActiveValue, Condition};
 
 use crate::enums::{cursor_enum::CursorEnum, order_enum::OrderEnum, role_enum::RoleEnum};
 use crate::helpers::{decode_cursor, encode_cursor, GQLAfter, GQLFilter};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, SimpleObject)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
-#[graphql(concrete(name = "User", params()), complex)]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
@@ -26,14 +24,11 @@ pub struct Model {
     #[sea_orm(column_type = "String(Some(50))")]
     pub last_name: String,
     #[sea_orm(column_type = "Date")]
-    #[graphql(skip)]
     pub date_of_birth: chrono::NaiveDate,
     #[sea_orm(column_type = "String(Some(5))", default = "USER")]
     pub role: RoleEnum,
     #[sea_orm(column_type = "Uuid", nullable)]
     pub picture: Option<String>,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub description: Option<String>,
     #[sea_orm(column_type = "SmallInteger", default = 0)]
     pub version: i16,
     #[sea_orm(column_type = "Boolean", default = false)]
@@ -41,11 +36,8 @@ pub struct Model {
     #[sea_orm(column_type = "Boolean", default = false)]
     pub suspended: bool,
     #[sea_orm(column_type = "Text")]
-    #[graphql(skip)]
     pub password: String,
-    #[graphql(skip)]
     pub created_at: DateTime,
-    #[graphql(skip)]
     pub updated_at: DateTime,
 }
 
@@ -57,6 +49,7 @@ pub enum Relation {
         belongs_to = "super::uploaded_file::Entity",
         from = "Column::Picture",
         to = "super::uploaded_file::Column::Id"
+        on_delete="SetNull"
     )]
     Picture,
 }
@@ -82,21 +75,6 @@ impl ActiveModelBehavior for ActiveModel {
             self.created_at = ActiveValue::Set(current_time);
         }
         Ok(self)
-    }
-}
-
-#[ComplexObject]
-impl Model {
-    pub async fn date_of_birth(&self) -> String {
-        self.date_of_birth.format("%Y-%m-%d").to_string()
-    }
-
-    pub async fn created_at(&self) -> i64 {
-        self.created_at.timestamp()
-    }
-
-    pub async fn updated_at(&self) -> i64 {
-        self.updated_at.timestamp()
     }
 }
 
@@ -151,8 +129,7 @@ impl GQLFilter for Entity {
             condition = condition
                 .add(Column::Username.contains(&search))
                 .add(Column::FirstName.contains(&search))
-                .add(Column::LastName.contains(&search))
-                .add(Column::Description.contains(&search));
+                .add(Column::LastName.contains(&search));
         }
         if let Some(after) = after {
             let after = decode_cursor(&after);

@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use async_graphql::*;
 use chrono::Utc;
 use sea_orm::{entity::prelude::*, ActiveValue};
 
@@ -26,7 +27,8 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::UserId",
-        to = "super::user::Column::Id"
+        to = "super::user::Column::Id",
+        on_delete = "Cascade"
     )]
     User,
 }

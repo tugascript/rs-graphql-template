@@ -1,4 +1,4 @@
-use sea_orm::{EntityTrait, Select, ModelTrait};
+use sea_orm::{EntityTrait, ModelTrait, Select};
 
 use crate::enums::{CursorEnum, OrderEnum};
 

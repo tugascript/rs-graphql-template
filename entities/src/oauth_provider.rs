@@ -10,7 +10,7 @@ use sea_orm::{entity::prelude::*, ActiveValue, Condition};
 use crate::enums::oauth_provider_enum::OAuthProviderEnum;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "login_codes")]
+#[sea_orm(table_name = "oauth_providers")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
@@ -29,7 +29,8 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::UserEmail",
-        to = "super::user::Column::Email"
+        to = "super::user::Column::Email",
+        on_delete = "Cascade"
     )]
     User,
 }
