@@ -1,6 +1,6 @@
 # Rust GraphQL Template
 
-**THIS PROJECT IS STILL ON GOING AND UNTESTED, USE IT ON YOUR OWN RISK**
+## **THIS PROJECT IS STILL ON GOING AND UNTESTED, USE IT ON YOUR OWN RISK**
 
 A full feature template to develop server-side GraphQL APIs using Rust for data and processor heavy APIs.
 
