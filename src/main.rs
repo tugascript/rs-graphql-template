@@ -9,7 +9,7 @@ async fn main() -> anyhow::Result<()> {
     let subscriber = Telemetry::get_subscriber("rust_graphql_template", "info");
     Telemetry::init_subscriber(subscriber);
     let application = App::new().await?;
-    let application_task = tokio::spawn(application.run_until_stopped());
+    let application_task = tokio::spawn(application.start_server());
 
     tokio::select! {
         o = application_task => report_exit("API", o),

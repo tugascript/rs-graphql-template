@@ -10,20 +10,21 @@ use actix_web::{
     HttpRequest, HttpResponse, Resource, Result,
 };
 use async_graphql::{
+    dataloader::DataLoader,
     http::{playground_source, GraphQLPlaygroundConfig},
     EmptySubscription, MergedObject, Schema,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 
-use crate::common::AuthTokens;
 use crate::providers::{Database, Jwt, ObjectStorage};
-use crate::resolvers::users_resolver::UsersQuery;
+use crate::resolvers::users_resolver;
+use crate::{common::AuthTokens, data_loaders::SeaOrmLoader};
 
 #[derive(MergedObject, Default)]
-pub struct MutationRoot;
+pub struct MutationRoot(users_resolver::UsersMutation);
 
 #[derive(MergedObject, Default)]
-pub struct QueryRoot(UsersQuery);
+pub struct QueryRoot(users_resolver::UsersQuery);
 
 pub fn build_schema(
     database: &Database,
@@ -35,6 +36,10 @@ pub fn build_schema(
         MutationRoot::default(),
         EmptySubscription,
     )
+    .data(DataLoader::new(
+        SeaOrmLoader::new(database),
+        tokio::task::spawn,
+    ))
     .data(database.to_owned())
     .data(jwt.to_owned())
     .data(object_storage)

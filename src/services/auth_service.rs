@@ -342,6 +342,42 @@ pub async fn reset_password(
     Ok(())
 }
 
+pub async fn update_password(
+    db: &Database,
+    cache: &Cache,
+    jwt: &Jwt,
+    body: bodies::ChangePassword,
+    access_token: &str,
+    refresh_token: &str,
+) -> Result<responses::Auth, ServiceError> {
+    let (id, _) = jwt.verify_access_token(&access_token)?;
+    let user = users_service::find_one_by_id(db, id).await?;
+    let user_version = user.version;
+    let (_, version, token_id, exp) = jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
+
+    if user_version != version {
+        return Err(ServiceError::unauthorized(
+            "Invalid token",
+            Some(InternalCause::new(
+                "Token version does not match user version",
+            )),
+        ));
+    }
+
+    let mut user: user::ActiveModel = user.into();
+    user.password = Set(hash_password(&body.password1)
+        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?);
+    user.version = Set(user_version + 1);
+    let user = user.update(db.get_connection()).await?;
+    create_blacklisted_token(cache, id, &token_id, exp).await?;
+    let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
+    Ok(responses::Auth::new(
+        access_token,
+        refresh_token,
+        jwt.get_access_token_time(),
+    ))
+}
+
 async fn create_blacklisted_token(
     cache: &Cache,
     user_id: i32,
@@ -422,7 +458,13 @@ pub async fn oauth_sign_in(
     }
 
     let (url, token) = request.set_pkce_challenge(pkce_code_challenge).url();
-    save_csrf_token(cache, &provider, token.secret(), pkce_code_verifier.secret()).await?;
+    save_csrf_token(
+        cache,
+        &provider,
+        token.secret(),
+        pkce_code_verifier.secret(),
+    )
+    .await?;
     Ok(url.to_string())
 }
 

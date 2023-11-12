@@ -5,10 +5,12 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use anyhow::Error;
+use async_graphql::{Context, Error as GqlError, Upload};
 use chrono::NaiveDate;
+use entities::user::Column;
 use sea_orm::{
-    ActiveModelTrait, DbErr, ModelTrait, PaginatorTrait, QuerySelect, Set, TransactionError,
-    TransactionTrait,
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, ModelTrait, PaginatorTrait,
+    QueryFilter, QuerySelect, Set, TransactionError, TransactionTrait,
 };
 
 use entities::helpers::GQLFilter;
@@ -18,25 +20,50 @@ use entities::{
     user::{ActiveModel, Entity, Model},
 };
 
-use crate::common::{ServiceError, INVALID_CREDENTIALS, SOMETHING_WENT_WRONG};
+use crate::common::{
+    format_name, format_point_slug, ServiceError, INVALID_CREDENTIALS, SOMETHING_WENT_WRONG,
+};
+use crate::dtos::Ratio;
+use crate::helpers::AccessUser;
 use crate::providers::{Database, ObjectStorage};
 
-use super::helpers::hash_password;
+use super::{helpers::hash_password, uploader_service};
 
 const USER_NOT_FOUND: &str = "User not found";
 
+fn get_full_name(first_name: &str, last_name: &str) -> String {
+    format!("{} {}", first_name, last_name)
+}
+
+async fn create_username(db: &Database, full_name: String) -> Result<String, ServiceError> {
+    let point_slug = format_point_slug(&full_name);
+    let count = Entity::find()
+        .filter(Column::Username.like(format!("{}%", point_slug)))
+        .count(db.get_connection())
+        .await?;
+
+    if count > 0 {
+        return Ok(format!("{}.{}", point_slug, count + 1));
+    }
+
+    Ok(point_slug)
+}
+
+// add user name
 pub async fn create_user(
     db: &Database,
     first_name: String,
     last_name: String,
     date_of_birth: String,
-    mut email: String,
+    email: String,
     mut password: String,
     provider: OAuthProviderEnum,
 ) -> Result<Model, ServiceError> {
     tracing::info_span!("users_service::create_user");
     tracing::trace_span!("Creating user");
-    email = email.to_lowercase();
+    let email = email.to_lowercase();
+    let first_name = format_name(&first_name)?;
+    let last_name = format_name(&last_name)?;
 
     if provider == OAuthProviderEnum::Local {
         let count = Entity::find_by_email(&email)
@@ -53,6 +80,7 @@ pub async fn create_user(
 
     let date_of_birth = NaiveDate::parse_from_str(&date_of_birth, "%Y-%m-%d")
         .map_err(|e| ServiceError::bad_request("Could not parse date", Some(e)))?;
+    let username = create_username(db, get_full_name(&first_name, &last_name)).await?;
     let user = db
         .get_connection()
         .transaction::<_, Model, DbErr>(|txn| {
@@ -61,6 +89,7 @@ pub async fn create_user(
                     email: Set(email.clone()),
                     first_name: Set(first_name),
                     last_name: Set(last_name),
+                    username: Set(username),
                     password: Set(password),
                     date_of_birth: Set(date_of_birth),
                     confirmed: Set(provider != OAuthProviderEnum::Local),
@@ -198,15 +227,6 @@ pub async fn find_one_by_version(
     }
 }
 
-pub async fn update_picture(
-    db: &Database,
-    os: &ObjectStorage,
-    id: i32,
-    upload: Vec<u8>,
-) -> Result<Model, ServiceError> {
-    todo!()
-}
-
 pub async fn delete_user(db: &Database, id: i32) -> Result<(), ServiceError> {
     let user = find_one_by_id(db, id).await?;
     let result = user.delete(db.get_connection()).await?;
@@ -237,4 +257,53 @@ pub async fn query(
         None => 0,
     };
     Ok((users, count, previous_count))
+}
+
+pub async fn update_picture(ctx: &Context<'_>, upload: Upload) -> Result<Model, GqlError> {
+    let access_user = AccessUser::get_access_user(ctx)?;
+    let db = ctx.data::<Database>()?;
+    let user = find_one_by_id(db, access_user.id).await?;
+    let object_storage = ctx.data::<ObjectStorage>()?;
+    let image = uploader_service::upload_image(
+        ctx,
+        Some(access_user.id),
+        Some(db),
+        Some(object_storage),
+        upload,
+        Ratio::Square,
+    )
+    .await?;
+    let mut user = user.into_active_model();
+    user.picture = Set(Some(image.id));
+    let user = user.update(db.get_connection()).await?;
+    Ok(user)
+}
+
+pub async fn update_name(
+    db: &Database,
+    user_id: i32,
+    first_name: String,
+    last_name: String,
+) -> Result<Model, ServiceError> {
+    let first_name = format_name(&first_name)?;
+    let last_name = format_name(&last_name)?;
+    let mut user = find_one_by_id(db, user_id).await?.into_active_model();
+    let username = create_username(db, get_full_name(&first_name, &last_name)).await?;
+    user.first_name = Set(first_name);
+    user.last_name = Set(last_name);
+    user.username = Set(username);
+    let user = user.update(db.get_connection()).await?;
+    Ok(user)
+}
+
+pub async fn update_email(
+    db: &Database,
+    user_id: i32,
+    email: String,
+) -> Result<Model, ServiceError> {
+    let email = email.to_lowercase();
+    let mut user = find_one_by_id(db, user_id).await?.into_active_model();
+    user.email = Set(email);
+    let user = user.update(db.get_connection()).await?;
+    Ok(user)
 }

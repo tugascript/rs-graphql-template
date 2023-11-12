@@ -98,6 +98,8 @@ fn image_processor(
 pub async fn upload_image(
     ctx: &Context<'_>,
     user_id: Option<i32>,
+    db: Option<&Database>,
+    os: Option<&ObjectStorage>,
     file: Upload,
     ratio: Ratio,
 ) -> Result<Model, Error> {
@@ -106,10 +108,16 @@ pub async fn upload_image(
         Some(access_user) => access_user,
         None => AccessUser::get_access_user(ctx)?.id,
     };
-    let file_storage = ctx.data::<ObjectStorage>()?;
-    let db = ctx.data::<Database>()?;
+    let object_storage = match os {
+        Some(os) => os,
+        None => ctx.data::<ObjectStorage>()?,
+    };
+    let db = match db {
+        Some(db) => db,
+        None => ctx.data::<Database>()?,
+    };
     let (image_id, image_data) = image_processor(ctx, file, ratio)?;
-    let url = file_storage
+    let url = object_storage
         .upload_file(user_id, &image_id, image_data)
         .await?;
     let uploaded_file = ActiveModel {

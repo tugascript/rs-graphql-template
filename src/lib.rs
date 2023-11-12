@@ -6,6 +6,7 @@
 
 mod common;
 mod controllers;
+mod data_loaders;
 mod dtos;
 mod guards;
 mod helpers;
