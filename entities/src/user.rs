@@ -45,24 +45,11 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::oauth_provider::Entity")]
     OAuthProvider,
-    #[sea_orm(
-        belongs_to = "super::uploaded_file::Entity",
-        from = "Column::Picture",
-        to = "super::uploaded_file::Column::Id"
-        on_delete="SetNull"
-    )]
-    Picture,
 }
 
 impl Related<super::oauth_provider::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::OAuthProvider.def()
-    }
-}
-
-impl Related<super::uploaded_file::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Picture.def()
     }
 }
 

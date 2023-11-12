@@ -12,7 +12,7 @@ use tracing_actix_web::TracingLogger;
 
 use crate::controllers::auth_controller::auth_router;
 use crate::providers::{Cache, Database, Jwt, Mailer, OAuth, ObjectStorage};
-use crate::startup::schema_builder::graphql_router;
+use crate::startup::schema_builder::{graphql_playgroud_route, graphql_route};
 
 use super::schema_builder::build_schema;
 
@@ -37,14 +37,15 @@ impl App {
         let server = HttpServer::new(move || {
             actix_web::App::new()
                 .wrap(TracingLogger::default())
-                .app_data(web::Data::new(schema.clone()))
                 .app_data(web::Data::new(oauth.clone()))
                 .app_data(web::Data::new(db.clone()))
                 .app_data(web::Data::new(cache.clone()))
                 .app_data(web::Data::new(jwt.clone()))
                 .app_data(web::Data::new(mailer.clone()))
                 .service(auth_router())
-                .service(graphql_router())
+                .app_data(web::Data::new(schema.clone()))
+                .service(graphql_route())
+                .service(graphql_playgroud_route())
         })
         .listen(listener)?
         .run();

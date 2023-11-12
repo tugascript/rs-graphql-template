@@ -64,10 +64,12 @@ async fn graphql_get() -> Result<HttpResponse> {
         .body(source))
 }
 
-pub fn graphql_router() -> Resource {
+pub fn graphql_route() -> Resource {
     resource("/api/graphql")
         .guard(guard::Post())
         .to(graphql_post)
-        .guard(guard::Get())
-        .to(graphql_get)
+}
+
+pub fn graphql_playgroud_route() -> Resource {
+    resource("/api/graphql").guard(guard::Get()).to(graphql_get)
 }

@@ -3412,6 +3412,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "derive_more",
+ "dotenvy",
  "entities",
  "image",
  "jsonwebtoken",

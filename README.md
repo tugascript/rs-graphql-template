@@ -54,17 +54,20 @@ To run the project you need to have the following tools installed:
 Create a `.env` file in the root of the project with the following content:
 
 ```dotenv
+# TCP port
+PORT=5000
+
 # DBs Setup
 REDIS_URL="redis://redis:6379"
-DATABASE_URL="postgres://postgres:postgres@db:5432/myapp"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/somedb"
 
 # Jwt OAuth Setup
 ACCESS_SECRET="random_string"
 ACCESS_TIME=600
 CONFIRMATION_SECRET="random_string"
 CONFIRMATION_TIME=3600
-RESET_PASSWORD_SECRET="random_string"
-RESET_PASSWORD_TIME=1800
+RESET_SECRET="random_string"
+RESET_TIME=1800
 REFRESH_SECRET="random_string"
 REFRESH_TIME=604800
 REFRESH_NAME="cookie_name"
@@ -82,13 +85,14 @@ GOOGLE_CLIENT_ID="000000000000"
 GOOGLE_CLIENT_SECRET="000000000000"
 FACEBOOK_CLIENT_ID="000000000000"
 FACEBOOK_CLIENT_SECRET="000000000000"
+BACKEND_URL="http://localhost:5000"
 
 # Object Storage Setup
 BUCKET_NAME="linode_or_aws_bucket_name"
 BUCKET_SECRET_KEY="bucket_secret_key"
 BUCKET_ACCESS_KEY="bucket_access_key"
 BUCKET_REGION="bucket_region"
-BUCKET_HOST="aws?linode?digitalocean?"
+BUCKET_HOST="digitalocean"
 USER_NAMESPACE="00000000-0000-0000-0000-000000000000"
 ```
 
