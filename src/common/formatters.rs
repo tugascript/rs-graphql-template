@@ -21,15 +21,15 @@ pub fn format_name(name: &str) -> Result<String, ServiceError> {
     }
 }
 
-pub fn format_slug(value: &str) -> String {
-    let slug = slugify(value);
+// pub fn format_slug(value: &str) -> String {
+//     let slug = slugify(value);
 
-    if slug.is_empty() {
-        return Uuid::new_v4().to_string();
-    }
+//     if slug.is_empty() {
+//         return Uuid::new_v4().to_string();
+//     }
 
-    slug
-}
+//     slug
+// }
 
 pub fn format_point_slug(value: &str) -> String {
     let slug = slugify(value);

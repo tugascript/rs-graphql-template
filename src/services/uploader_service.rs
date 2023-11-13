@@ -58,33 +58,32 @@ fn image_processor(
     let (width, height) = image_control.dimensions();
 
     let cropped_image = match ratio {
-        Ratio::None => image_control,
+        // Ratio::None => image_control,
         Ratio::Square => {
             let size = min(width, height);
             image_control.crop_imm((width - size) / 2, (height - size) / 2, size, size)
-        }
-        Ratio::Landscape => {
-            let height_size = height;
-            let width_size = (height * 16) / 9;
-            let x_offset = if width_size > width {
-                0
-            } else {
-                (width - width_size) / 2
-            };
-            let y_offset = 0;
-            image_control.crop_imm(x_offset, y_offset, min(width_size, width), height_size)
-        }
-        Ratio::Portrait => {
-            let width_size = width;
-            let height_size = (width * 9) / 16;
-            let x_offset = 0;
-            let y_offset = if height_size > height {
-                0
-            } else {
-                (height - height_size) / 2
-            };
-            image_control.crop_imm(x_offset, y_offset, width_size, min(height_size, height))
-        }
+        } // Ratio::Landscape => {
+          //     let height_size = height;
+          //     let width_size = (height * 16) / 9;
+          //     let x_offset = if width_size > width {
+          //         0
+          //     } else {
+          //         (width - width_size) / 2
+          //     };
+          //     let y_offset = 0;
+          //     image_control.crop_imm(x_offset, y_offset, min(width_size, width), height_size)
+          // }
+          // Ratio::Portrait => {
+          //     let width_size = width;
+          //     let height_size = (width * 9) / 16;
+          //     let x_offset = 0;
+          //     let y_offset = if height_size > height {
+          //         0
+          //     } else {
+          //         (height - height_size) / 2
+          //     };
+          //     image_control.crop_imm(x_offset, y_offset, width_size, min(height_size, height))
+          // }
     };
     let mut compressed_buffer = Cursor::new(Vec::<u8>::new());
 

@@ -6,7 +6,7 @@
 
 pub enum Ratio {
     Square,
-    Landscape,
-    Portrait,
-    None,
+    // Landscape,
+    // Portrait,
+    // None,
 }
