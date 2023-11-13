@@ -4,5 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-pub mod auth_controller;
-pub mod health_controller;
+use actix_web::{web, HttpResponse, Scope};
+
+async fn health_check() -> HttpResponse {
+    HttpResponse::Ok().finish()
+}
+
+pub fn health_router() -> Scope {
+    web::scope("/health-check").route("/", web::get().to(health_check))
+}

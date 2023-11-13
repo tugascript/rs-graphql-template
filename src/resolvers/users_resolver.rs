@@ -73,12 +73,12 @@ impl UsersQuery {
 #[Object]
 impl UsersMutation {
     #[graphql(guard = "AuthGuard")]
-    async fn update_picture(&self, ctx: &Context<'_>, upload: Upload) -> Result<User> {
+    async fn update_user_picture(&self, ctx: &Context<'_>, upload: Upload) -> Result<User> {
         Ok(users_service::update_picture(ctx, upload).await?.into())
     }
 
     #[graphql(guard = "AuthGuard")]
-    async fn update_name(&self, ctx: &Context<'_>, input: UpdateName) -> Result<User> {
+    async fn update_user_name(&self, ctx: &Context<'_>, input: UpdateName) -> Result<User> {
         let db = ctx.data::<Database>()?;
         let user = AccessUser::get_access_user(ctx)?;
         Ok(
@@ -89,7 +89,7 @@ impl UsersMutation {
     }
 
     #[graphql(guard = "AuthGuard")]
-    async fn update_email(
+    async fn update_user_email(
         &self,
         ctx: &Context<'_>,
         #[graphql(validator(email, min_length = 5, max_length = 200))] email: String,

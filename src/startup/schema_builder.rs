@@ -17,14 +17,18 @@ use async_graphql::{
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 
 use crate::providers::{Database, Jwt, ObjectStorage};
-use crate::resolvers::users_resolver;
+use crate::resolvers::{health_resolver, uploader_resolver, users_resolver};
 use crate::{common::AuthTokens, data_loaders::SeaOrmLoader};
 
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(users_resolver::UsersMutation);
 
 #[derive(MergedObject, Default)]
-pub struct QueryRoot(users_resolver::UsersQuery);
+pub struct QueryRoot(
+    users_resolver::UsersQuery,
+    uploader_resolver::UploaderQuery,
+    health_resolver::HealthQuery,
+);
 
 pub fn build_schema(
     database: &Database,

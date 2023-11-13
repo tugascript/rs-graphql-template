@@ -11,6 +11,7 @@ use anyhow::Error;
 use tracing_actix_web::TracingLogger;
 
 use crate::controllers::auth_controller::auth_router;
+use crate::controllers::health_controller::health_router;
 use crate::providers::{Cache, Database, Jwt, Mailer, OAuth, ObjectStorage};
 use crate::startup::schema_builder::{graphql_playgroud_route, graphql_route};
 
@@ -43,6 +44,7 @@ impl App {
                 .app_data(web::Data::new(jwt.clone()))
                 .app_data(web::Data::new(mailer.clone()))
                 .service(auth_router())
+                .service(health_router())
                 .app_data(web::Data::new(schema.clone()))
                 .service(graphql_route())
                 .service(graphql_playgroud_route())
