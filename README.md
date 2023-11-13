@@ -99,7 +99,11 @@ USER_NAMESPACE="00000000-0000-0000-0000-000000000000"
 Run the following commands.
 
 ```bash
-$ docker-compose up -d
+$ cargo install sqlx-cli
+$ cargo install sea-orm-cli
+$ sqlx database create
+$ sea-orm-cli migrate -d migrations
+$ podman-compose up -d
 $ cargo run
 ```
 
