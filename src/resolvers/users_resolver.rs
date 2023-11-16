@@ -9,7 +9,9 @@ use async_graphql::{Context, Object, Result, Upload};
 
 use entities::enums::{CursorEnum, OrderEnum};
 use entities::helpers::GQLAfter;
+use entities::user::Model;
 
+use crate::common::{InternalCause, ServiceError};
 use crate::dtos::inputs::UpdateName;
 use crate::dtos::objects::{Message, TotalCount, User};
 use crate::guards::AuthGuard;
@@ -22,6 +24,17 @@ pub struct UsersQuery;
 
 #[derive(Default)]
 pub struct UsersMutation;
+
+fn check_confirmation(user: Model) -> Result<User> {
+    if !user.confirmed {
+        return Err(ServiceError::not_found(
+            "User not found",
+            Some(InternalCause::new("User is not confirmed")),
+        )
+        .into());
+    }
+    Ok(user.into())
+}
 
 #[Object]
 impl UsersQuery {
@@ -51,15 +64,13 @@ impl UsersQuery {
     }
 
     async fn user_by_id(&self, ctx: &Context<'_>, id: i32) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-        Ok(users_service::find_one_by_id(db, id).await?.into())
+        check_confirmation(users_service::find_one_by_id(ctx.data::<Database>()?, id).await?)
     }
 
     async fn user_by_username(&self, ctx: &Context<'_>, username: String) -> Result<User> {
-        let db = ctx.data::<Database>()?;
-        Ok(users_service::find_one_by_username(db, &username)
-            .await?
-            .into())
+        check_confirmation(
+            users_service::find_one_by_username(ctx.data::<Database>()?, &username).await?,
+        )
     }
 
     #[graphql(guard = "AuthGuard")]

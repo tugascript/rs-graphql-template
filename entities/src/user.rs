@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use chrono::Utc;
+use sea_orm::QueryOrder;
 use sea_orm::{entity::prelude::*, ActiveValue, Condition};
 
 use crate::enums::{cursor_enum::CursorEnum, order_enum::OrderEnum, role_enum::RoleEnum};
@@ -118,6 +119,16 @@ impl GQLFilter for Entity {
                 .add(Column::FirstName.contains(&search))
                 .add(Column::LastName.contains(&search));
         }
+        if condition.is_empty() {
+            condition = Condition::all()
+                .add(Column::Confirmed.eq(true))
+                .add(Column::Suspended.eq(false));
+        } else {
+            condition = Condition::all()
+                .add(Column::Confirmed.eq(true))
+                .add(Column::Suspended.eq(false))
+                .add(condition);
+        }
         if let Some(after) = after {
             let after = decode_cursor(&after);
 
@@ -152,7 +163,10 @@ impl GQLFilter for Entity {
         }
 
         (
-            Self::find().filter(condition),
+            Self::find().filter(condition).order_by_asc(match cursor {
+                CursorEnum::Alpha => Column::Username,
+                CursorEnum::Date => Column::Id,
+            }),
             match inverse_condition {
                 Some(inverse_condition) => Some(Self::find().filter(inverse_condition)),
                 None => None,
