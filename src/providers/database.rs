@@ -6,6 +6,7 @@
 
 use anyhow::Error;
 use sea_orm::DatabaseConnection;
+use secrecy::{ExposeSecret, Secret};
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -13,9 +14,8 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new() -> Result<Self, Error> {
-        let con_str = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        let connection = sea_orm::Database::connect(con_str).await?;
+    pub async fn new(url: &Secret<String>) -> Result<Self, Error> {
+        let connection = sea_orm::Database::connect(url.expose_secret()).await?;
 
         Ok(Self { connection })
     }

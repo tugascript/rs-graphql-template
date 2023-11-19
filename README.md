@@ -88,12 +88,12 @@ FACEBOOK_CLIENT_SECRET="000000000000"
 BACKEND_URL="http://localhost:5000"
 
 # Object Storage Setup
-BUCKET_NAME="linode_or_aws_bucket_name"
-BUCKET_SECRET_KEY="bucket_secret_key"
-BUCKET_ACCESS_KEY="bucket_access_key"
-BUCKET_REGION="bucket_region"
-BUCKET_HOST="digitalocean"
-USER_NAMESPACE="00000000-0000-0000-0000-000000000000"
+OBJECT_STORAGE_BUCKET="linode_or_aws_bucket_name"
+OBJECT_STORAGE_SECRET_KEY="bucket_secret_key"
+OBJECT_STORAGE_ACCESS_KEY="bucket_access_key"
+OBJECT_STORAGE_REGION="bucket_region"
+OBJECT_STORAGE_HOST="digitalocean"
+OBJECT_STORAGE_NAMESPACE="00000000-0000-0000-0000-000000000000"
 ```
 
 Run the following commands.
@@ -101,9 +101,9 @@ Run the following commands.
 ```bash
 $ cargo install sqlx-cli
 $ cargo install sea-orm-cli
+$ podman-compose up -d
 $ sqlx database create
 $ sea-orm-cli migrate -d migrations
-$ podman-compose up -d
 $ cargo run
 ```
 

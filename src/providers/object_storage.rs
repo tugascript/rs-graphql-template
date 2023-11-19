@@ -4,10 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::env;
-
 use rusoto_core::{credential::StaticProvider, HttpClient, Region};
 use rusoto_s3::{PutObjectRequest, S3Client, S3};
+use secrecy::{ExposeSecret, Secret};
 use uuid::Uuid;
 
 use crate::common::{ServiceError, INTERNAL_SERVER_ERROR};
@@ -21,16 +20,16 @@ pub struct ObjectStorage {
 }
 
 impl ObjectStorage {
-    pub fn new() -> Self {
-        let region = env::var("BUCKET_REGION").unwrap();
-        let host = env::var("BUCKET_HOST").unwrap();
-        let bucket = env::var("BUCKET_NAME").unwrap();
-        let access_key = env::var("BUCKET_ACCESS_KEY").unwrap();
-        let secret_key = env::var("BUCKET_SECRET_KEY").unwrap();
-        let namespace_string = env::var("USER_NAMESPACE").unwrap();
-
+    pub fn new(
+        region: String,
+        host: String,
+        bucket: String,
+        access_key: &Secret<String>,
+        secret_key: &Secret<String>,
+        namespace: &Secret<String>,
+    ) -> Self {
         let endpoint = format!("https://{}.{}.com", region, host);
-        let namespace = Uuid::parse_str(&namespace_string).unwrap();
+        let namespace = Uuid::parse_str(namespace.expose_secret()).unwrap();
 
         let region = Region::Custom {
             name: "custom".to_string(),
@@ -38,7 +37,12 @@ impl ObjectStorage {
         };
         let client = S3Client::new_with(
             HttpClient::new().unwrap(),
-            StaticProvider::new(access_key, secret_key, None, None),
+            StaticProvider::new(
+                access_key.expose_secret().to_owned(),
+                secret_key.expose_secret().to_owned(),
+                None,
+                None,
+            ),
             region,
         );
         Self {

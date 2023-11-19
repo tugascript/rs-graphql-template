@@ -4,43 +4,57 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::env;
-
 use lettre::{
     transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message,
     Tokio1Executor,
 };
+use secrecy::{ExposeSecret, Secret};
 
-use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
+use crate::{
+    common::{ServiceError, SOMETHING_WENT_WRONG},
+    config::Environment,
+};
 
 #[derive(Clone, Debug)]
 pub struct Mailer {
     email: String,
-    front_end_url: String,
+    frontend_url: String,
     mailer: AsyncSmtpTransport<Tokio1Executor>,
+    environment: Environment,
 }
 
 impl Mailer {
-    pub fn new() -> Self {
-        let host = env::var("EMAIL_HOST").unwrap();
-        let email = env::var("EMAIL_USER").unwrap();
-        let password = env::var("EMAIL_PASSWORD").unwrap();
-        let port = env::var("EMAIL_PORT").unwrap().parse::<u16>().unwrap();
-        let front_end_url = env::var("FRONT_END_URL").unwrap();
+    pub fn new(
+        environment: Environment,
+        host: String,
+        port: u16,
+        user: String,
+        password: &Secret<String>,
+        frontend_url: String,
+    ) -> Self {
         let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&host)
             .unwrap()
             .port(port)
-            .credentials(Credentials::new(email.to_owned(), password))
+            .credentials(Credentials::new(
+                user.clone(),
+                password.expose_secret().to_owned(),
+            ))
             .build();
 
         Self {
-            email,
-            front_end_url,
+            environment,
+            email: user,
+            frontend_url,
             mailer,
         }
     }
 
     fn send_email(&self, to: String, subject: String, body: String) -> Result<(), ServiceError> {
+        if !self.environment.is_production() {
+            println!("Subject: {}\n\n{}", subject, body);
+            return Ok(());
+        }
+
         let message = Message::builder()
             .from(self.email.parse().unwrap())
             .to(to.parse().unwrap())
@@ -72,7 +86,7 @@ impl Mailer {
         jwt: &str,
     ) -> Result<(), ServiceError> {
         tracing::trace_span!("Sending confirmation email");
-        let link = format!("{}/confirmation/{}", self.front_end_url, &jwt);
+        let link = format!("{}/confirmation/{}", self.frontend_url, &jwt);
 
         self.send_email(
             email.to_owned(),
@@ -138,7 +152,7 @@ impl Mailer {
         full_name: &str,
         token: &str,
     ) -> Result<(), ServiceError> {
-        let link = format!("{}/confirmation/{}", self.front_end_url, &token);
+        let link = format!("{}/confirmation/{}", self.frontend_url, &token);
 
         self.send_email(
             email.to_owned(),

@@ -11,8 +11,6 @@ use uuid::Uuid;
 
 use entities::user::Model;
 
-use crate::providers::TokenType;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmailToken {
     id: i32,
@@ -45,9 +43,8 @@ impl Claims {
         secret: &str,
         exp: i64,
         iss: &str,
-        token_type: TokenType,
+        sub: String,
     ) -> Result<String> {
-        let sub = token_type.to_string();
         let now = Utc::now();
         let claims = Claims {
             sub,
