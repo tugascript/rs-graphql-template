@@ -18,7 +18,7 @@ pub struct Model {
     pub user_email: String,
     #[sea_orm(column_type = "String(Some(8))")]
     pub provider: OAuthProviderEnum,
-    #[sea_orm(column_type = "Boolean", default = true)]
+    #[sea_orm(column_type = "Boolean", default_value = true)]
     pub two_factor: bool,
     pub created_at: DateTime,
     pub updated_at: DateTime,

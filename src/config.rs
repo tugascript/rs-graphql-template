@@ -24,6 +24,7 @@ impl Environment {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Config {
     environment: Environment,
     host: String,

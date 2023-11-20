@@ -2,14 +2,14 @@ use std::fmt::{Debug, Display};
 
 use tokio::task::JoinError;
 
-use rust_graphql_template::startup::{App, Telemetry};
+use rust_graphql_template::startup::{ActixApp, Telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv()?;
     let subscriber = Telemetry::get_subscriber("rust_graphql_template", "info");
     Telemetry::init_subscriber(subscriber);
-    let application = App::new().await?;
+    let application = ActixApp::new().await?;
     let application_task = tokio::spawn(application.start_server());
 
     tokio::select! {

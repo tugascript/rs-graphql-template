@@ -6,3 +6,6 @@
 
 pub mod auth_controller;
 pub mod health_controller;
+
+#[cfg(test)]
+mod tests;

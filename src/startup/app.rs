@@ -6,7 +6,7 @@
 
 use std::{io, net::TcpListener};
 
-use actix_web::{dev::Server, web, HttpServer};
+use actix_web::{dev::Server, web, App, HttpServer};
 use anyhow::Error;
 use tracing_actix_web::TracingLogger;
 
@@ -18,16 +18,37 @@ use crate::startup::schema_builder::{graphql_playgroud_route, graphql_route};
 
 use super::schema_builder::build_schema;
 
-pub struct App {
+pub struct ActixApp {
     port: u16,
     server: Server,
 }
 
-impl App {
+impl ActixApp {
     pub async fn new() -> Result<Self, Error> {
         let config = Config::new();
+        let (host, port) = config.app_config();
         let db = Database::new(config.database_config()).await?;
-        let cache = Cache::new(config.cache_config())?;
+        let listener = TcpListener::bind(format!("{}:{}", host, port))?;
+        let port = listener.local_addr().unwrap().port();
+        let server = HttpServer::new(move || {
+            App::new()
+                .wrap(TracingLogger::default())
+                .configure(Self::build_app_config(&config, &db))
+        })
+        .listen(listener)?
+        .run();
+        Ok(Self { port, server })
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub async fn start_server(self) -> Result<(), io::Error> {
+        self.server.await
+    }
+
+    pub fn build_app_config(config: &Config, db: &Database) -> impl Fn(&mut web::ServiceConfig) {
         let (access_jwt, refresh_jwt, confirmation_jwt, reset_jwt) = config.jwt_config();
         let jwt = Jwt::new(
             access_jwt,
@@ -59,14 +80,11 @@ impl App {
             config.object_storage_config();
         let object_storage =
             ObjectStorage::new(region, host, bucket, access_key, secret_key, namespace);
-        let (host, port) = config.app_config();
-        let listener = TcpListener::bind(format!("{}:{}", host, port))?;
-        let port = listener.local_addr().unwrap().port();
+        let db = db.clone();
+        let cache = Cache::new(config.cache_config()).unwrap();
         let schema = build_schema(&db, &jwt, object_storage);
-        let server = HttpServer::new(move || {
-            actix_web::App::new()
-                .wrap(TracingLogger::default())
-                .app_data(web::Data::new(oauth.clone()))
+        move |cfg: &mut web::ServiceConfig| {
+            cfg.app_data(web::Data::new(oauth.clone()))
                 .app_data(web::Data::new(db.clone()))
                 .app_data(web::Data::new(cache.clone()))
                 .app_data(web::Data::new(jwt.clone()))
@@ -75,18 +93,7 @@ impl App {
                 .service(health_router())
                 .app_data(web::Data::new(schema.clone()))
                 .service(graphql_route())
-                .service(graphql_playgroud_route())
-        })
-        .listen(listener)?
-        .run();
-        Ok(Self { port, server })
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub async fn start_server(self) -> Result<(), io::Error> {
-        self.server.await
+                .service(graphql_playgroud_route());
+        }
     }
 }

@@ -13,12 +13,17 @@ pub fn format_name(name: &str) -> Result<String, ServiceError> {
     let mut title = name.trim().to_lowercase();
     title = new_line_regex()?.replace_all(&title, " ").to_string();
     title = multi_spaces_regex()?.replace_all(&title, " ").to_string();
-    let mut c = title.chars();
-
-    match c.next() {
-        None => Ok(title),
-        Some(f) => Ok(f.to_uppercase().collect::<String>() + c.as_str()),
-    }
+    Ok(title
+        .split_whitespace()
+        .map(|word| {
+            let mut c = word.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(" "))
 }
 
 // pub fn format_slug(value: &str) -> String {

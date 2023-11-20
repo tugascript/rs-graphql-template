@@ -26,15 +26,15 @@ pub struct Model {
     pub last_name: String,
     #[sea_orm(column_type = "Date")]
     pub date_of_birth: chrono::NaiveDate,
-    #[sea_orm(column_type = "String(Some(5))", default = "USER")]
+    #[sea_orm(column_type = "String(Some(5))", default_value = "USER")]
     pub role: RoleEnum,
     #[sea_orm(column_type = "Uuid", nullable)]
     pub picture: Option<String>,
-    #[sea_orm(column_type = "SmallInteger", default = 0)]
+    #[sea_orm(column_type = "SmallInteger", default_value = 0)]
     pub version: i16,
-    #[sea_orm(column_type = "Boolean", default = false)]
+    #[sea_orm(column_type = "Boolean", default_value = false)]
     pub confirmed: bool,
-    #[sea_orm(column_type = "Boolean", default = false)]
+    #[sea_orm(column_type = "Boolean", default_value = false)]
     pub suspended: bool,
     #[sea_orm(column_type = "Text")]
     pub password: String,

@@ -111,8 +111,14 @@ pub async fn create_user(
         })
         .await
         .map_err(|e| match e {
-            TransactionError::Connection(e) => e,
-            TransactionError::Transaction(e) => e,
+            TransactionError::Connection(e) => {
+                print!("{}", e);
+                e
+            }
+            TransactionError::Transaction(e) => {
+                print!("{}", e);
+                e
+            }
         })?;
     tracing::trace_span!("Successfully created user", id=%user.id);
     Ok(user)

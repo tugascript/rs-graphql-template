@@ -319,3 +319,7 @@ pub fn auth_router() -> Scope {
         .route("/ext/google", web::get().to(google_sign_in))
         .route("/ext/google/callback", web::get().to(google_callback))
 }
+
+#[cfg(test)]
+mod tests {
+}

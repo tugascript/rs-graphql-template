@@ -56,3 +56,6 @@ regex = "1"
 unicode-segmentation = "1"
 slug = "0.1"
 dotenvy = "0.15"
+
+[dev-dependencies]
+fake = "2.9.1"

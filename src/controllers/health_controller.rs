@@ -11,5 +11,5 @@ async fn health_check() -> HttpResponse {
 }
 
 pub fn health_router() -> Scope {
-    web::scope("/health-check").route("/", web::get().to(health_check))
+    web::scope("/api").route("/health-check", web::get().to(health_check))
 }

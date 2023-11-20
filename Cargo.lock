@@ -1457,6 +1457,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fake"
+version = "2.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26221445034074d46b276e13eb97a265ebdb8ed8da705c4dddd3dd20b66b45d2"
+dependencies = [
+ "deunicode",
+ "rand",
+]
+
+[[package]]
 name = "fast_chemail"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3414,6 +3424,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "entities",
+ "fake",
  "image",
  "jsonwebtoken",
  "lettre",
