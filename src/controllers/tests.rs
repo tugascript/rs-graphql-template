@@ -64,12 +64,12 @@ async fn test_sign_up() {
     let req = test::TestRequest::post()
         .uri("/api/auth/sign-up")
         .set_json(json!({
-            "email": email,
-            "first_name": first_name,
-            "last_name": last_name,
-            "date_of_birth": date_of_birth,
-            "password1": password1,
-            "password2": password2,
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
         }))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -79,4 +79,81 @@ async fn test_sign_up() {
         .unwrap()
         .as_str()
         .contains("User created successfully"));
+
+    let invalid_payloads = [
+        json!({
+            "email": "not_an_email",
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }),
+        json!({
+            "email": &email,
+            "first_name": "Invalid%%66",
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }),
+        json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": "to_long".repeat(50),
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }),
+        json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": "01-01-1990",
+            "password1": &password1,
+            "password2": &password2,
+        }),
+        json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": "not_valid_password",
+            "password2": "not_valid_password",
+        }),
+        json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": format!("{}_e", &password2),
+        }),
+    ];
+
+    for body in invalid_payloads {
+        let req = test::TestRequest::post()
+            .uri("/api/auth/sign-up")
+            .set_json(body)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(&resp.status().is_client_error());
+        assert_eq!(&resp.status().as_u16(), &400);
+    }
+
+    // User already exists
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-up")
+        .set_json(json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_client_error());
+    assert_eq!(&resp.status().as_u16(), &409);
 }
