@@ -6,8 +6,9 @@
 
 use chrono::{Duration, Utc};
 use entities::{enums::role_enum::RoleEnum, user::Model};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, errors::Result};
+use jsonwebtoken::{decode, encode, errors::Result, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AccessToken {
@@ -28,6 +29,7 @@ impl From<&Model> for AccessToken {
 pub struct Claims {
     iss: String,
     sub: String,
+    jti: String,
     iat: i64,
     exp: i64,
     user: AccessToken,
@@ -40,6 +42,7 @@ impl Claims {
             sub: "access".to_string(),
             iss: iss.to_string(),
             iat: now.timestamp(),
+            jti: Uuid::new_v4().to_string(),
             exp: (now + Duration::seconds(exp)).timestamp(),
             user: AccessToken::from(user),
         };

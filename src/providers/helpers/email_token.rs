@@ -15,7 +15,6 @@ use entities::user::Model;
 pub struct EmailToken {
     id: i32,
     version: i16,
-    token_id: String,
 }
 
 impl From<&Model> for EmailToken {
@@ -23,7 +22,6 @@ impl From<&Model> for EmailToken {
         Self {
             id: model.id.to_owned(),
             version: model.version.to_owned(),
-            token_id: Uuid::new_v4().to_string(),
         }
     }
 }
@@ -32,6 +30,7 @@ impl From<&Model> for EmailToken {
 pub struct Claims {
     iss: String,
     sub: String,
+    jti: String,
     iat: i64,
     exp: i64,
     user: EmailToken,
@@ -49,6 +48,7 @@ impl Claims {
         let claims = Claims {
             sub,
             iss: iss.to_string(),
+            jti: Uuid::new_v4().to_string(),
             iat: now.timestamp(),
             exp: (now + Duration::seconds(exp)).timestamp(),
             user: EmailToken::from(user),
@@ -69,7 +69,7 @@ impl Claims {
         Ok((
             token_data.claims.user.id,
             token_data.claims.user.version,
-            token_data.claims.user.token_id,
+            token_data.claims.jti,
             token_data.claims.exp,
         ))
     }

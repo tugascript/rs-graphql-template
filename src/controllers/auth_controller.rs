@@ -97,9 +97,9 @@ async fn sign_in(
             jwt_ref.get_email_token_time(TokenType::Refresh),
             auth_response,
         )),
-        responses::SignIn::Mfa => {
-            Ok(HttpResponse::Ok().json(responses::Message::new("Confirmation code sent")))
-        }
+        responses::SignIn::Mfa => Ok(HttpResponse::Ok().json(responses::Message::new(
+            "Confirmation code sent, check your email",
+        ))),
     }
 }
 
@@ -241,6 +241,31 @@ async fn update_password(
     ))
 }
 
+async fn update_two_factor(
+    auth_tokens: AuthTokens,
+    db: web::Data<Database>,
+    jwt: web::Data<Jwt>,
+    body: web::Json<bodies::ChangeTwoFactor>,
+) -> Result<HttpResponse, ServiceError> {
+    let access_token = match auth_tokens.access_token {
+        Some(access_token) => access_token,
+        None => {
+            return Err(ServiceError::unauthorized(
+                UNAUTHORIZED,
+                Some(InternalCause::new("Access token not found")),
+            ));
+        }
+    };
+    auth_service::update_two_factor(
+        db.get_ref(),
+        jwt.get_ref(),
+        body.into_inner(),
+        &access_token,
+    )
+    .await?;
+    Ok(HttpResponse::Ok().json(responses::Message::new("Two factor updated successfully")))
+}
+
 async fn facebook_sign_in(
     cache: web::Data<Cache>,
     oauth: web::Data<OAuth>,
@@ -314,12 +339,9 @@ pub fn auth_router() -> Scope {
         .route("/forgot-password", web::post().to(forgot_password))
         .route("/reset-password", web::post().to(reset_password))
         .route("/update-password", web::post().to(update_password))
+        .route("/update-two-factor", web::post().to(update_two_factor))
         .route("/ext/facebook", web::get().to(facebook_sign_in))
         .route("/ext/facebook/callback", web::get().to(facebook_callback))
         .route("/ext/google", web::get().to(google_sign_in))
         .route("/ext/google/callback", web::get().to(google_callback))
-}
-
-#[cfg(test)]
-mod tests {
 }

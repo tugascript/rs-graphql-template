@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 pub use change_password::*;
+pub use change_two_factor::*;
 pub use confirm_email::*;
 pub use confirm_sign_in::*;
 pub use email::*;
@@ -14,6 +15,7 @@ pub use sign_in::*;
 pub use sign_up::*;
 
 pub mod change_password;
+pub mod change_two_factor;
 pub mod confirm_email;
 pub mod confirm_sign_in;
 pub mod email;

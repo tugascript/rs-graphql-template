@@ -58,7 +58,7 @@ Create a `.env` file in the root of the project with the following content:
 PORT=5000
 
 # DBs Setup
-REDIS_URL="redis://redis:6379"
+REDIS_URL="redis://localhost:6379"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/somedb"
 
 # Jwt OAuth Setup

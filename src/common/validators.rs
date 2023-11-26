@@ -28,6 +28,7 @@ impl PasswordValidity {
     }
 }
 
+#[derive(Debug)]
 pub enum ValidatorEnum {
     Valid,
     Invalid(String),

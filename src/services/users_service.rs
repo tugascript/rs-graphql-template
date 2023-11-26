@@ -13,7 +13,7 @@ use sea_orm::{
     QueryFilter, QuerySelect, Set, TransactionError, TransactionTrait,
 };
 
-use entities::helpers::GQLFilter;
+use entities::helpers::GQLQuery;
 use entities::{
     enums::{CursorEnum, OAuthProviderEnum, OrderEnum},
     oauth_provider,
@@ -22,6 +22,7 @@ use entities::{
 
 use crate::common::{
     format_name, format_point_slug, ServiceError, INVALID_CREDENTIALS, SOMETHING_WENT_WRONG,
+    UNAUTHORIZED,
 };
 use crate::dtos::Ratio;
 use crate::helpers::AccessUser;
@@ -48,6 +49,8 @@ async fn create_username(db: &Database, full_name: String) -> Result<String, Ser
 
     Ok(point_slug)
 }
+
+// TODO: add traces to all pub fn
 
 // add user name
 pub async fn create_user(
@@ -111,14 +114,8 @@ pub async fn create_user(
         })
         .await
         .map_err(|e| match e {
-            TransactionError::Connection(e) => {
-                print!("{}", e);
-                e
-            }
-            TransactionError::Transaction(e) => {
-                print!("{}", e);
-                e
-            }
+            TransactionError::Connection(e) => e,
+            TransactionError::Transaction(e) => e,
         })?;
     tracing::trace_span!("Successfully created user", id=%user.id);
     Ok(user)
@@ -229,7 +226,7 @@ pub async fn find_one_by_version(
 
     match user {
         Some(value) => Ok(value),
-        None => Err(ServiceError::not_found::<Error>(USER_NOT_FOUND, None)),
+        None => Err(ServiceError::unauthorized::<Error>(UNAUTHORIZED, None)),
     }
 }
 
@@ -255,7 +252,7 @@ pub async fn query(
     after: Option<String>,
     search: Option<String>,
 ) -> Result<(Vec<Model>, u64, u64), ServiceError> {
-    let (select, inverse_select) = Entity::filter(order, cursor, after, search);
+    let (select, inverse_select) = Entity::query(order, cursor, after, search);
     let users = select.clone().limit(limit).all(db.get_connection()).await?;
     let count = select.count(db.get_connection()).await?;
     let previous_count = match inverse_select {

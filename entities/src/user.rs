@@ -9,7 +9,7 @@ use sea_orm::QueryOrder;
 use sea_orm::{entity::prelude::*, ActiveValue, Condition};
 
 use crate::enums::{cursor_enum::CursorEnum, order_enum::OrderEnum, role_enum::RoleEnum};
-use crate::helpers::{decode_cursor, encode_cursor, GQLAfter, GQLFilter};
+use crate::helpers::{decode_cursor, encode_cursor, GQLAfter, GQLQuery};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
@@ -103,8 +103,8 @@ impl Entity {
     }
 }
 
-impl GQLFilter for Entity {
-    fn filter(
+impl GQLQuery for Entity {
+    fn query(
         order: OrderEnum,
         cursor: CursorEnum,
         after: Option<String>,
