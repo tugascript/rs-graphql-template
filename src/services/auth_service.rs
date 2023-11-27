@@ -437,7 +437,7 @@ async fn save_csrf_token(
     let mut connection = cache.get_connection().await?;
     let key = format!("{}:{}", provider.to_str(), token);
     connection
-        .set_ex(&key, verifier, 300)
+        .set_ex(&key, verifier, 600)
         .await
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     Ok(())

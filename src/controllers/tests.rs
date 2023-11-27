@@ -5,8 +5,10 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use actix_web::{body::to_bytes, test, web::Bytes, App};
+use bcrypt::hash;
 use entities::{enums, oauth_provider, user};
 use fake::{faker::name::raw::*, locales::EN, Fake};
+use redis::AsyncCommands;
 use sea_orm::{ActiveModelTrait, Set};
 use serde_json::json;
 use tracing_actix_web::TracingLogger;
@@ -22,14 +24,14 @@ impl BodyTest for Bytes {
     }
 }
 
-use crate::providers::TokenType;
+use crate::providers::{Cache, TokenType};
 use crate::{
     config::Config,
     providers::{Database, Jwt},
     startup::ActixApp,
 };
 
-async fn create_base_config() -> (Config, Database, Jwt) {
+async fn create_base_config() -> (Config, Database, Jwt, Cache) {
     let config = Config::new();
     let db = Database::new(config.database_config())
         .await
@@ -45,14 +47,15 @@ async fn create_base_config() -> (Config, Database, Jwt) {
         refresh_name,
         api_id,
     );
-    (config, db, jwt)
+    let cache = Cache::new(config.cache_config()).unwrap();
+    (config, db, jwt, cache)
 }
 
 // TODO: add clean up after each test
 
 #[actix_web::test]
 async fn test_health_check() {
-    let (config, db, _) = create_base_config().await;
+    let (config, db, _, _) = create_base_config().await;
     let app =
         test::init_service(App::new().configure(ActixApp::build_app_config(&config, &db))).await;
 
@@ -66,7 +69,7 @@ async fn test_health_check() {
 
 #[actix_web::test]
 async fn test_sign_up() {
-    let (config, db, _) = create_base_config().await;
+    let (config, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
@@ -180,7 +183,7 @@ async fn test_sign_up() {
 
 #[actix_web::test]
 async fn test_confirm_email() {
-    let (config, db, jwt) = create_base_config().await;
+    let (config, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
@@ -263,7 +266,7 @@ async fn test_confirm_email() {
 
 #[actix_web::test]
 async fn test_sign_in() {
-    let (config, db, jwt) = create_base_config().await;
+    let (config, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
@@ -370,4 +373,118 @@ async fn test_sign_in() {
     let resp = test::call_service(&app, req).await;
     assert!(&resp.status().is_client_error());
     assert_eq!(&resp.status().as_u16(), &401);
+}
+
+#[actix_web::test]
+async fn test_confirm_sign_in() {
+    let (config, db, jwt, cache) = create_base_config().await;
+    let app = test::init_service(
+        App::new()
+            .wrap(TracingLogger::default())
+            .configure(ActixApp::build_app_config(&config, &db)),
+    )
+    .await;
+
+    // Creating user
+    let email = format!("{}@gmail.com", Uuid::new_v4().to_string().to_uppercase());
+    let first_name: String = Name(EN).fake();
+    let last_name: String = Name(EN).fake();
+    let date_of_birth = "1990-01-01".to_string();
+    let password1 = "Valid_Password12".to_string();
+    let password2 = password1.clone();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-up")
+        .set_json(json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }))
+        .to_request();
+    test::call_service(&app, req).await;
+
+    // Confirm user
+    let user = user::Entity::find_by_email(&email.to_lowercase())
+        .one(db.get_connection())
+        .await
+        .unwrap()
+        .unwrap();
+    let token = jwt
+        .generate_email_token(TokenType::Confirmation, &user)
+        .unwrap();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/confirm-email")
+        .set_json(json!({
+            "confirmation_token": &token,
+        }))
+        .to_request();
+    test::call_service(&app, req).await;
+
+    // Sign in
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-in")
+        .set_json(json!({
+            "email": &email,
+            "password": &password1,
+        }))
+        .to_request();
+    test::call_service(&app, req).await;
+
+    // Generate code
+    let email = email.to_lowercase();
+    let code = "123456";
+    let code_hash = hash(code, 5).unwrap();
+    let key = format!("access_code:{}", &email);
+    let mut connection = cache.get_connection().await.unwrap();
+    connection
+        .set_ex::<&str, &str, ()>(&key, &code_hash, 600)
+        .await
+        .unwrap();
+
+    // Success confirm sign in
+    let req = test::TestRequest::post()
+        .uri("/api/auth/confirm-sign-in")
+        .set_json(json!({
+            "email": &email,
+            "code": &code,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_success());
+    assert_eq!(&resp.status().as_u16(), &200);
+    let json_body = to_bytes(resp.into_body())
+        .await
+        .unwrap()
+        .as_str()
+        .to_owned();
+    assert!(json_body.contains("access_token"));
+    assert!(json_body.contains("refresh_token"));
+    assert!(json_body.contains("token_type"));
+    assert!(json_body.contains("expires_in"));
+
+    // Invalid code
+    let req = test::TestRequest::post()
+        .uri("/api/auth/confirm-sign-in")
+        .set_json(json!({
+            "email": &email,
+            "code": "654321",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_client_error());
+    assert_eq!(&resp.status().as_u16(), &401);
+
+    // Invalid email
+    let req = test::TestRequest::post()
+        .uri("/api/auth/confirm-sign-in")
+        .set_json(json!({
+            "email": "not_an_email",
+            "code": &code,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_client_error());
+    assert_eq!(&resp.status().as_u16(), &400);
 }
