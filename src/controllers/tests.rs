@@ -24,6 +24,7 @@ impl BodyTest for Bytes {
     }
 }
 
+use crate::dtos::responses;
 use crate::providers::{Cache, TokenType};
 use crate::{
     config::Config,
@@ -487,4 +488,173 @@ async fn test_confirm_sign_in() {
     let resp = test::call_service(&app, req).await;
     assert!(&resp.status().is_client_error());
     assert_eq!(&resp.status().as_u16(), &400);
+}
+
+#[actix_web::test]
+async fn test_sign_out() {
+    let (config, db, _, _) = create_base_config().await;
+    let app = test::init_service(
+        App::new()
+            .wrap(TracingLogger::default())
+            .configure(ActixApp::build_app_config(&config, &db)),
+    )
+    .await;
+
+    // Creating user
+    let email = format!("{}@gmail.com", Uuid::new_v4().to_string().to_uppercase());
+    let first_name: String = Name(EN).fake();
+    let last_name: String = Name(EN).fake();
+    let date_of_birth = "1991-01-01".to_string();
+    let password1 = "Valid_Password12".to_string();
+    let password2 = password1.clone();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-up")
+        .set_json(json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }))
+        .to_request();
+    test::call_service(&app, req).await;
+
+    // disable two factor
+    let user = user::Entity::find_by_email(&email.to_lowercase())
+        .one(db.get_connection())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut user: user::ActiveModel = user.into();
+    user.confirmed = Set(true);
+    user.update(db.get_connection()).await.unwrap();
+    let oauth_provider = oauth_provider::Entity::find_by_email_and_provider(
+        &email.to_lowercase(),
+        enums::OAuthProviderEnum::Local,
+    )
+    .one(db.get_connection())
+    .await
+    .unwrap()
+    .unwrap();
+    let mut oauth_provider: oauth_provider::ActiveModel = oauth_provider.into();
+    oauth_provider.two_factor = Set(false);
+    oauth_provider.update(db.get_connection()).await.unwrap();
+
+    // Sign in
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-in")
+        .set_json(json!({
+            "email": &email,
+            "password": &password1,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    // Success sign out
+    let json_body = to_bytes(resp.into_body())
+        .await
+        .unwrap()
+        .as_str()
+        .to_owned();
+    let json_body: responses::Auth = serde_json::from_str(&json_body).unwrap();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-out")
+        .set_json(json!({
+            "refresh_token": &json_body.refresh_token,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_success());
+    assert_eq!(&resp.status().as_u16(), &200);
+
+    // Invalid refresh token
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-out")
+        .set_json(json!({
+            "refresh_token": "invalid_token",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_client_error());
+    assert_eq!(&resp.status().as_u16(), &400);
+}
+
+#[actix_web::test]
+async fn test_refresh_token() {
+    let (config, db, _, _) = create_base_config().await;
+    let app = test::init_service(
+        App::new()
+            .wrap(TracingLogger::default())
+            .configure(ActixApp::build_app_config(&config, &db)),
+    )
+    .await;
+
+    // Creating user
+    let email = format!("{}@gmail.com", Uuid::new_v4().to_string().to_uppercase());
+    let first_name: String = Name(EN).fake();
+    let last_name: String = Name(EN).fake();
+    let date_of_birth = "1991-01-01".to_string();
+    let password1 = "Valid_Password12".to_string();
+    let password2 = password1.clone();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-up")
+        .set_json(json!({
+            "email": &email,
+            "first_name": &first_name,
+            "last_name": &last_name,
+            "date_of_birth": &date_of_birth,
+            "password1": &password1,
+            "password2": &password2,
+        }))
+        .to_request();
+    test::call_service(&app, req).await;
+
+    // disable two factor
+    let user = user::Entity::find_by_email(&email.to_lowercase())
+        .one(db.get_connection())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut user: user::ActiveModel = user.into();
+    user.confirmed = Set(true);
+    user.update(db.get_connection()).await.unwrap();
+    let oauth_provider = oauth_provider::Entity::find_by_email_and_provider(
+        &email.to_lowercase(),
+        enums::OAuthProviderEnum::Local,
+    )
+    .one(db.get_connection())
+    .await
+    .unwrap()
+    .unwrap();
+    let mut oauth_provider: oauth_provider::ActiveModel = oauth_provider.into();
+    oauth_provider.two_factor = Set(false);
+    oauth_provider.update(db.get_connection()).await.unwrap();
+
+    // Sign in
+    let req = test::TestRequest::post()
+        .uri("/api/auth/sign-in")
+        .set_json(json!({
+            "email": &email,
+            "password": &password1,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let json_body = to_bytes(resp.into_body())
+        .await
+        .unwrap()
+        .as_str()
+        .to_owned();
+    let json_body: responses::Auth = serde_json::from_str(&json_body).unwrap();
+
+    // Success refresh token
+    let req = test::TestRequest::post()
+        .uri("/api/auth/refresh-token")
+        .set_json(json!({
+            "refresh_token": &json_body.refresh_token,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(&resp.status().is_success());
+    assert_eq!(&resp.status().as_u16(), &200);
 }
