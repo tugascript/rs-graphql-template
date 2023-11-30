@@ -19,8 +19,8 @@ use sea_orm::ActiveValue::Set;
 use entities::{enums::oauth_provider_enum::OAuthProviderEnum, oauth_provider, user};
 
 use crate::common::{
-    InternalCause, ServiceError, CONFLICT_STATUS_CODE, INVALID_CREDENTIALS, NOT_FOUND_STATUS_CODE,
-    SOMETHING_WENT_WRONG,
+    InternalCause, ServiceError, INVALID_CREDENTIALS, NOT_FOUND_STATUS_CODE, SOMETHING_WENT_WRONG,
+    UNAUTHORIZED_STATUS_CODE,
 };
 use crate::dtos::{bodies, queries, responses};
 use crate::providers::{Cache, Database, ExternalProvider, Jwt, Mailer, OAuth, TokenType};
@@ -292,10 +292,10 @@ pub async fn forgot_password(
     email: &str,
 ) -> Result<(), ServiceError> {
     tracing::info_span!("auth_service::reset_password_email");
-    let formatted_email = email.to_lowercase();
+    let email = email.to_lowercase();
 
-    if let Err(err) = find_oauth_provider(db, &formatted_email, OAuthProviderEnum::Local).await {
-        if err.get_status_code() == CONFLICT_STATUS_CODE {
+    if let Err(err) = find_oauth_provider(db, &email, OAuthProviderEnum::Local).await {
+        if err.get_status_code() == UNAUTHORIZED_STATUS_CODE {
             tracing::trace_span!("Failed to find user local OAuth provider");
             return Ok(());
         }
@@ -303,7 +303,7 @@ pub async fn forgot_password(
         return Err(err);
     }
 
-    let user = match users_service::find_one_by_email(db, &formatted_email).await {
+    let user = match users_service::find_one_by_email(db, &email).await {
         Ok(user) => user,
         Err(err) => {
             if err.get_status_code() == NOT_FOUND_STATUS_CODE {
@@ -316,7 +316,7 @@ pub async fn forgot_password(
     };
 
     let reset_token = jwt.generate_email_token(TokenType::Reset, &user)?;
-    mailer.send_password_reset_email(&formatted_email, &user.full_name(), &reset_token)?;
+    mailer.send_password_reset_email(&email, &user.full_name(), &reset_token)?;
 
     Ok(())
 }
@@ -350,20 +350,26 @@ pub async fn update_password(
     jwt: &Jwt,
     body: bodies::ChangePassword,
     access_token: &str,
-    refresh_token: &str,
+    refresh_token: &Option<String>,
 ) -> Result<responses::Auth, ServiceError> {
     let (id, _) = jwt.verify_access_token(&access_token)?;
     let user = users_service::find_one_by_id(db, id).await?;
     let user_version = user.version;
-    let (_, version, token_id, exp) = jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
 
-    if user_version != version {
-        return Err(ServiceError::unauthorized(
-            "Invalid token",
-            Some(InternalCause::new(
-                "Token version does not match user version",
-            )),
-        ));
+    if let Some(refresh_token) = refresh_token {
+        let (_, version, token_id, exp) =
+            jwt.verify_email_token(TokenType::Refresh, refresh_token)?;
+
+        if user_version != version {
+            return Err(ServiceError::unauthorized(
+                "Invalid token",
+                Some(InternalCause::new(
+                    "Token version does not match user version",
+                )),
+            ));
+        }
+
+        create_blacklisted_token(cache, id, &token_id, exp).await?;
     }
 
     let mut user: user::ActiveModel = user.into();
@@ -371,7 +377,6 @@ pub async fn update_password(
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?);
     user.version = Set(user_version + 1);
     let user = user.update(db.get_connection()).await?;
-    create_blacklisted_token(cache, id, &token_id, exp).await?;
     let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
     Ok(responses::Auth::new(
         access_token,

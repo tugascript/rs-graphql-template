@@ -216,15 +216,7 @@ async fn update_password(
             ));
         }
     };
-    let refresh_token = match auth_tokens.refresh_token {
-        Some(refresh_token) => refresh_token,
-        None => {
-            return Err(ServiceError::unauthorized(
-                UNAUTHORIZED,
-                Some(InternalCause::new("Refresh token not found")),
-            ));
-        }
-    };
+
     let jwt_ref = jwt.get_ref();
     Ok(save_refresh_token(
         jwt_ref.get_refresh_name(),
@@ -235,7 +227,7 @@ async fn update_password(
             jwt_ref,
             body.into_inner().validate()?,
             &access_token,
-            &refresh_token,
+            &auth_tokens.refresh_token,
         )
         .await?,
     ))
