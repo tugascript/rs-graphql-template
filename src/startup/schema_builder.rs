@@ -4,11 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use actix_web::{
-    guard,
-    web::{resource, Data},
-    HttpRequest, HttpResponse, Resource, Result,
-};
+use actix_web::{web::Data, HttpRequest, HttpResponse, Result};
 use async_graphql::{
     dataloader::DataLoader,
     http::{playground_source, GraphQLPlaygroundConfig},
@@ -33,7 +29,7 @@ pub struct QueryRoot(
 pub fn build_schema(
     database: &Database,
     jwt: &Jwt,
-    object_storage: ObjectStorage,
+    object_storage: &ObjectStorage,
 ) -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
     Schema::build(
         QueryRoot::default(),
@@ -46,11 +42,11 @@ pub fn build_schema(
     ))
     .data(database.to_owned())
     .data(jwt.to_owned())
-    .data(object_storage)
+    .data(object_storage.to_owned())
     .finish()
 }
 
-async fn graphql_post(
+pub async fn graphql_request(
     schema: Data<Schema<QueryRoot, MutationRoot, EmptySubscription>>,
     req: HttpRequest,
     gql_req: GraphQLRequest,
@@ -61,19 +57,9 @@ async fn graphql_post(
         .into()
 }
 
-async fn graphql_get() -> Result<HttpResponse> {
+pub async fn graphql_playground() -> Result<HttpResponse> {
     let source = playground_source(GraphQLPlaygroundConfig::new("/api/graphql"));
     Ok(HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(source))
-}
-
-pub fn graphql_route() -> Resource {
-    resource("/api/graphql")
-        .guard(guard::Post())
-        .to(graphql_post)
-}
-
-pub fn graphql_playgroud_route() -> Resource {
-    resource("/api/graphql").guard(guard::Get()).to(graphql_get)
 }

@@ -194,6 +194,7 @@ impl From<DbErr> for ServiceError {
             }
             DbErr::Query(err) => {
                 tracing::error!("Database query error: {:?}", err);
+                println!("Database query error: {:?}", err);
                 Self::InternalServerError(SOMETHING_WENT_WRONG.to_string())
             }
             DbErr::Json(err) => {

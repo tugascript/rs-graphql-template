@@ -6,6 +6,7 @@
 
 use std::{io, net::TcpListener};
 
+use actix_web::guard;
 use actix_web::{dev::Server, web, App, HttpServer};
 use anyhow::Error;
 use tracing_actix_web::TracingLogger;
@@ -14,9 +15,8 @@ use crate::config::Config;
 use crate::controllers::auth_controller::auth_router;
 use crate::controllers::health_controller::health_router;
 use crate::providers::{Cache, Database, Jwt, Mailer, OAuth, ObjectStorage};
-use crate::startup::schema_builder::{graphql_playgroud_route, graphql_route};
 
-use super::schema_builder::build_schema;
+use super::schema_builder::{build_schema, graphql_playground, graphql_request};
 
 pub struct ActixApp {
     port: u16,
@@ -82,18 +82,26 @@ impl ActixApp {
             ObjectStorage::new(region, host, bucket, access_key, secret_key, namespace);
         let db = db.clone();
         let cache = Cache::new(config.cache_config()).unwrap();
-        let schema = build_schema(&db, &jwt, object_storage);
         move |cfg: &mut web::ServiceConfig| {
-            cfg.app_data(web::Data::new(oauth.clone()))
+            let schema = build_schema(&db, &jwt, &object_storage);
+            cfg.app_data(web::Data::new(schema))
+                .service(
+                    web::resource("/api/graphql")
+                        .guard(guard::Post())
+                        .to(graphql_request),
+                )
+                .service(
+                    web::resource("/api/graphql")
+                        .guard(guard::Get())
+                        .to(graphql_playground),
+                )
+                .app_data(web::Data::new(oauth.clone()))
                 .app_data(web::Data::new(db.clone()))
                 .app_data(web::Data::new(cache.clone()))
                 .app_data(web::Data::new(jwt.clone()))
                 .app_data(web::Data::new(mailer.clone()))
                 .service(auth_router())
-                .service(health_router())
-                .app_data(web::Data::new(schema.clone()))
-                .service(graphql_route())
-                .service(graphql_playgroud_route());
+                .service(health_router());
         }
     }
 }

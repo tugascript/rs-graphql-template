@@ -7,3 +7,6 @@
 pub mod health_resolver;
 pub mod uploader_resolver;
 pub mod users_resolver;
+
+#[cfg(test)]
+mod tests;

@@ -28,7 +28,7 @@ impl ObjectStorage {
         secret_key: &Secret<String>,
         namespace: &Secret<String>,
     ) -> Self {
-        let endpoint = format!("https://{}.{}.com", region, host);
+        let endpoint = format!("https://{}.{}", region, host);
         let namespace = Uuid::parse_str(namespace.expose_secret()).unwrap();
 
         let region = Region::Custom {

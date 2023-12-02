@@ -93,7 +93,7 @@ impl Mailer {
             format!("Email confirmation, {}", full_name),
             format!(
                 r#"
-            <bodies>
+            <body>
               <p>Hello {},</p>
               <br />
               <p>Welcome to Your Company,</p>
@@ -109,7 +109,7 @@ impl Mailer {
               <br />
               <p>Best regards,</p>
               <p>Your Company Team</p>
-            </bodies>
+            </body>
           "#,
                 full_name, &link, &link,
             ),
@@ -127,7 +127,7 @@ impl Mailer {
             format!("Your access code, {}", full_name),
             format!(
                 r#"
-                <bodies>
+                <body>
                     <p>Hello {},</p>
                     <br />
                     <p>Welcome to Your Company,</p>
@@ -139,7 +139,7 @@ impl Mailer {
                     <br />
                     <p>Best regards,</p>
                     <p>Your Company Team</p>
-                </bodies> 
+                </body> 
             "#,
                 full_name, code
             ),
@@ -159,7 +159,7 @@ impl Mailer {
             format!("Email confirmation, {}", full_name),
             format!(
                 r#"
-                <bodies>
+                <body>
                     <p>Hello {},</p>
                     <br />
                     <p>Your password reset link:
@@ -169,7 +169,7 @@ impl Mailer {
                     <br />
                     <p>Best regards,</p>
                     <p>Your Company Team</p>
-                </bodies>
+                </body>
                 "#,
                 &full_name, &link, &link,
             ),

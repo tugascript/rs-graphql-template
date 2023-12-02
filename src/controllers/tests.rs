@@ -97,7 +97,6 @@ fn check_is_auth_response(json_body: String) {
     assert!(json_body.contains("expires_in"));
 }
 
-// TODO: add clean up after each test
 async fn delete_user(db: &Database, user: user::Model) {
     user.delete(db.get_connection()).await.unwrap();
 }
@@ -105,8 +104,12 @@ async fn delete_user(db: &Database, user: user::Model) {
 #[actix_web::test]
 async fn test_health_check() {
     let (config, db, _, _) = create_base_config().await;
-    let app =
-        test::init_service(App::new().configure(ActixApp::build_app_config(&config, &db))).await;
+    let app = test::init_service(
+        App::new()
+            .wrap(TracingLogger::default())
+            .configure(ActixApp::build_app_config(&config, &db)),
+    )
+    .await;
 
     let req = test::TestRequest::get()
         .uri("/api/health-check")

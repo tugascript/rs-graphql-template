@@ -299,11 +299,7 @@ pub async fn update_name(
     Ok(user)
 }
 
-pub async fn update_email(
-    db: &Database,
-    user_id: i32,
-    email: String,
-) -> Result<Model, ServiceError> {
+pub async fn update_email(db: &Database, user_id: i32, email: &str) -> Result<Model, ServiceError> {
     let email = email.to_lowercase();
     let mut user = find_one_by_id(db, user_id).await?.into_active_model();
     user.email = Set(email);

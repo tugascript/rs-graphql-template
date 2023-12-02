@@ -12,7 +12,7 @@ use entities::helpers::GQLAfter;
 use entities::user::Model;
 
 use crate::common::{InternalCause, ServiceError};
-use crate::dtos::inputs::UpdateName;
+use crate::dtos::inputs::{UpdateName, UpdateNameValidator};
 use crate::dtos::objects::{Message, TotalCount, User};
 use crate::guards::AuthGuard;
 use crate::helpers::AccessUser;
@@ -38,7 +38,7 @@ fn check_confirmation(user: Model) -> Result<User> {
 
 #[Object]
 impl UsersQuery {
-    async fn query_users(
+    async fn users(
         &self,
         ctx: &Context<'_>,
         order: OrderEnum,
@@ -89,7 +89,11 @@ impl UsersMutation {
     }
 
     #[graphql(guard = "AuthGuard")]
-    async fn update_user_name(&self, ctx: &Context<'_>, input: UpdateName) -> Result<User> {
+    async fn update_user_name(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(validator(custom = "UpdateNameValidator"))] input: UpdateName,
+    ) -> Result<User> {
         let db = ctx.data::<Database>()?;
         let user = AccessUser::get_access_user(ctx)?;
         Ok(
@@ -107,7 +111,7 @@ impl UsersMutation {
     ) -> Result<User> {
         let db = ctx.data::<Database>()?;
         let user = AccessUser::get_access_user(ctx)?;
-        Ok(users_service::update_email(db, user.id, email)
+        Ok(users_service::update_email(db, user.id, &email)
             .await?
             .into())
     }

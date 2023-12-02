@@ -5,13 +5,13 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use async_graphql::dataloader::DataLoader;
-use async_graphql::{ComplexObject, Context, Result, SimpleObject};
+use async_graphql::{ComplexObject, Context, Error, Result, SimpleObject};
+use chrono::{NaiveDate, Utc};
 
 use entities::enums::RoleEnum;
 use entities::user::Model;
 
 use crate::data_loaders::{FileId, SeaOrmLoader};
-use crate::guards::AuthGuard;
 use crate::helpers::AccessUser;
 
 use super::UploadedFile;
@@ -28,9 +28,10 @@ pub struct User {
     pub username: String,
     pub first_name: String,
     pub last_name: String,
+    #[graphql(skip)]
     pub date_of_birth: String,
     pub role: RoleEnum,
-    pub create_at: i64,
+    pub created_at: i64,
     pub updated_at: i64,
 }
 
@@ -46,7 +47,7 @@ impl From<Model> for User {
             last_name: value.last_name,
             date_of_birth: value.date_of_birth.to_string(),
             role: value.role,
-            create_at: value.created_at.timestamp(),
+            created_at: value.created_at.timestamp(),
             updated_at: value.updated_at.timestamp(),
         }
     }
@@ -54,14 +55,27 @@ impl From<Model> for User {
 
 #[ComplexObject]
 impl User {
-    #[graphql(guard = "AuthGuard")]
     pub async fn email(&self, ctx: &Context<'_>) -> Result<Option<&str>> {
-        let user = AccessUser::get_access_user(ctx)?;
+        let user = match AccessUser::get_access_user(ctx) {
+            Ok(user) => user,
+            Err(_) => return Ok(None),
+        };
 
         if user.id == self.id {
             Ok(Some(&self.email))
         } else {
             Ok(None)
+        }
+    }
+
+    pub async fn age(&self) -> Result<u32> {
+        let date_of_birth = NaiveDate::parse_from_str(&self.date_of_birth, "%Y-%m-%d")
+            .map_err(|_| Error::from("Invalid date of birth"))?;
+
+        if let Some(age) = Utc::now().date_naive().years_since(date_of_birth) {
+            Ok(age)
+        } else {
+            Err(Error::from("Invalid date of birth"))
         }
     }
 
