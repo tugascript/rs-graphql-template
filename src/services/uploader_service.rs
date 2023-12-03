@@ -6,13 +6,12 @@
 
 use std::{
     cmp::min,
-    fs::File,
-    io::{Cursor, Read},
+    io::{BufReader, Cursor},
 };
 
 use anyhow::Error as AnyHowError;
 use async_graphql::{Context, Error, Upload};
-use image::{GenericImageView, ImageOutputFormat::Jpeg};
+use image::{GenericImageView, ImageFormat, ImageOutputFormat::Jpeg};
 use sea_orm::{ActiveModelTrait, Set};
 use uuid::Uuid;
 
@@ -25,13 +24,6 @@ use crate::{dtos::ratio::Ratio, providers::ObjectStorage};
 
 type ImageData = Vec<u8>;
 type ImageId = Uuid;
-
-fn load_file_data(mut file: File) -> Result<Vec<u8>, ServiceError> {
-    let mut buffer = Vec::<u8>::new();
-    file.read_to_end(&mut buffer)
-        .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
-    Ok(buffer)
-}
 
 fn image_processor(
     ctx: &Context<'_>,
@@ -55,8 +47,25 @@ fn image_processor(
     }
 
     tracing::info!("Loading image data...");
-    let image_data = load_file_data(file_info.content)?;
-    let image_control = image::load_from_memory(&image_data)
+    let image_format = match file_type.as_str() {
+        "image/png" => ImageFormat::Png,
+        "image/jpeg" => ImageFormat::Jpeg,
+        "image/gif" => ImageFormat::Gif,
+        "image/bmp" => ImageFormat::Bmp,
+        "image/tiff" => ImageFormat::Tiff,
+        "image/webp" => ImageFormat::WebP,
+        "image/x-icon" => ImageFormat::Ico,
+        _ => {
+            return Err(ServiceError::bad_request(
+                "Unsupported image type",
+                Some(InternalCause::new(&format!(
+                    "Unsupported image type: {}",
+                    file_type
+                ))),
+            ))
+        }
+    };
+    let image_control = image::load(BufReader::new(file_info.content), image_format)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     tracing::info!("Successfully loaded image data of type: {}", file_type);
 
@@ -95,7 +104,7 @@ fn image_processor(
     tracing::info!("Compressing image...");
     let mut compressed_buffer = Cursor::new(Vec::<u8>::new());
     cropped_image
-        .write_to(&mut compressed_buffer, Jpeg(80))
+        .write_to(&mut compressed_buffer, Jpeg(75))
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     tracing::info!("Successfully compressed image");
 
