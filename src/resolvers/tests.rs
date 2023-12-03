@@ -14,6 +14,7 @@ use serde_json::json;
 use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
 
+const PORT: u16 = 5000;
 const GRAPHQL_PATH: &'static str = "/api/graphql";
 
 trait BodyTest {
@@ -26,33 +27,23 @@ impl BodyTest for Bytes {
     }
 }
 
-use crate::providers::{Cache, TokenType};
+use crate::providers::{Cache, Environment, TokenType};
 use crate::{
-    config::Config,
     providers::{Database, Jwt},
     startup::ActixApp,
 };
 
 const VALID_PASSWORD: &'static str = "Valid_Password12";
 
-async fn create_base_config() -> (Config, Database, Jwt, Cache) {
-    let config = Config::new();
-    let db = Database::new(config.database_config())
+async fn create_base_config() -> (Environment, Database, Jwt, Cache) {
+    dotenvy::dotenv().expect("Failed to load .env file");
+    let environment = Environment::Development;
+    let db = Database::new()
         .await
         .expect("Failed to connect to database");
-    let (access_jwt, refresh_jwt, confirmation_jwt, reset_jwt) = config.jwt_config();
-    let api_id = config.api_id();
-    let refresh_name = config.refresh_name();
-    let jwt = Jwt::new(
-        access_jwt,
-        refresh_jwt,
-        confirmation_jwt,
-        reset_jwt,
-        refresh_name,
-        api_id,
-    );
-    let cache = Cache::new(config.cache_config()).unwrap();
-    (config, db, jwt, cache)
+    let jwt = Jwt::new(&environment, &Uuid::new_v4().to_string());
+    let cache = Cache::new();
+    (environment, db, jwt, cache)
 }
 
 async fn create_user(db: &Database, confirm: bool) -> user::Model {
@@ -97,11 +88,11 @@ async fn delete_user(db: &Database, user: user::Model) {
 
 #[actix_web::test]
 async fn test_resolver_health_check() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -129,11 +120,11 @@ async fn test_resolver_health_check() {
 
 #[actix_web::test]
 async fn test_resolver_users() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let mut user_vec = Vec::<user::Model>::new();
@@ -244,11 +235,11 @@ async fn test_resolver_users() {
 
 #[actix_web::test]
 async fn test_resolver_user_by_id() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;
@@ -322,11 +313,11 @@ async fn test_resolver_user_by_id() {
 
 #[actix_web::test]
 async fn test_resolver_user_by_username() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;
@@ -369,11 +360,11 @@ async fn test_resolver_user_by_username() {
 
 #[actix_web::test]
 async fn test_resolver_me() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;
@@ -440,11 +431,11 @@ async fn test_resolver_me() {
 
 #[actix_web::test]
 async fn test_resolver_update_user_name() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;
@@ -522,11 +513,11 @@ async fn test_resolver_update_user_name() {
 
 #[actix_web::test]
 async fn test_resolver_update_user_email() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;
@@ -604,11 +595,11 @@ async fn test_resolver_update_user_email() {
 
 #[actix_web::test]
 async fn test_delete_user() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
     let user = create_user(&db, true).await;

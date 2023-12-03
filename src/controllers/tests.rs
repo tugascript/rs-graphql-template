@@ -25,33 +25,24 @@ impl BodyTest for Bytes {
     }
 }
 
-use crate::providers::{Cache, TokenType};
+use crate::providers::{Cache, Environment, TokenType};
 use crate::{
-    config::Config,
     providers::{Database, Jwt},
     startup::ActixApp,
 };
 
+const PORT: u16 = 5000;
 const VALID_PASSWORD: &'static str = "Valid_Password12";
 
-async fn create_base_config() -> (Config, Database, Jwt, Cache) {
-    let config = Config::new();
-    let db = Database::new(config.database_config())
+async fn create_base_config() -> (Environment, Database, Jwt, Cache) {
+    dotenvy::dotenv().expect("Failed to load .env file");
+    let environment = Environment::Development;
+    let db = Database::new()
         .await
         .expect("Failed to connect to database");
-    let (access_jwt, refresh_jwt, confirmation_jwt, reset_jwt) = config.jwt_config();
-    let api_id = config.api_id();
-    let refresh_name = config.refresh_name();
-    let jwt = Jwt::new(
-        access_jwt,
-        refresh_jwt,
-        confirmation_jwt,
-        reset_jwt,
-        refresh_name,
-        api_id,
-    );
-    let cache = Cache::new(config.cache_config()).unwrap();
-    (config, db, jwt, cache)
+    let jwt = Jwt::new(&environment, &Uuid::new_v4().to_string());
+    let cache = Cache::new();
+    (environment, db, jwt, cache)
 }
 
 async fn create_user(db: &Database, confirm: bool) -> user::Model {
@@ -103,29 +94,27 @@ async fn delete_user(db: &Database, user: user::Model) {
 
 #[actix_web::test]
 async fn test_health_check() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
-
     let req = test::TestRequest::get()
         .uri("/api/health-check")
         .to_request();
     let resp = test::call_service(&app, req).await;
-
     assert!(resp.status().is_success());
 }
 
 #[actix_web::test]
 async fn test_sign_up() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -241,13 +230,13 @@ async fn test_sign_up() {
 
 #[actix_web::test]
 async fn test_confirm_email() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, false).await;
     let token = create_token(&jwt, &user, Some(TokenType::Confirmation)).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -297,12 +286,12 @@ async fn test_confirm_email() {
 
 #[actix_web::test]
 async fn test_sign_in() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -373,12 +362,12 @@ async fn test_sign_in() {
 
 #[actix_web::test]
 async fn test_confirm_sign_in() {
-    let (config, db, _, cache) = create_base_config().await;
+    let (environment, db, _, cache) = create_base_config().await;
     let user = create_user(&db, true).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -441,13 +430,13 @@ async fn test_confirm_sign_in() {
 
 #[actix_web::test]
 async fn test_sign_out() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let token = create_token(&jwt, &user, Some(TokenType::Refresh)).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -479,13 +468,13 @@ async fn test_sign_out() {
 
 #[actix_web::test]
 async fn test_refresh_token() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let token = create_token(&jwt, &user, Some(TokenType::Refresh)).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -506,12 +495,12 @@ async fn test_refresh_token() {
 
 #[actix_web::test]
 async fn test_forgot_password() {
-    let (config, db, _, _) = create_base_config().await;
+    let (environment, db, _, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -554,14 +543,14 @@ async fn test_forgot_password() {
 
 #[actix_web::test]
 async fn test_reset_password() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let token = create_token(&jwt, &user, Some(TokenType::Reset)).await;
     let new_password = "New_Password12".to_string();
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -610,7 +599,7 @@ async fn test_reset_password() {
 
 #[actix_web::test]
 async fn test_update_password() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let token = create_token(&jwt, &user, None).await;
     let bearer_token = format!("Bearer {}", &token);
@@ -620,7 +609,7 @@ async fn test_update_password() {
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 
@@ -686,7 +675,7 @@ async fn test_update_password() {
 
 #[actix_web::test]
 async fn test_update_two_factor() {
-    let (config, db, jwt, _) = create_base_config().await;
+    let (environment, db, jwt, _) = create_base_config().await;
     let user = create_user(&db, true).await;
     let token = create_token(&jwt, &user, None).await;
     let bearer_token = format!("Bearer {}", &token);
@@ -694,7 +683,7 @@ async fn test_update_two_factor() {
     let app = test::init_service(
         App::new()
             .wrap(TracingLogger::default())
-            .configure(ActixApp::build_app_config(&config, &db)),
+            .configure(ActixApp::build_app_config(environment, PORT, &db)),
     )
     .await;
 

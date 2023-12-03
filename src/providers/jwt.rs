@@ -4,17 +4,34 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::env;
+
 use secrecy::{ExposeSecret, Secret};
 use uuid::Uuid;
 
 use entities::{enums::role_enum::RoleEnum, user::Model};
 
-use crate::{
-    common::{ServiceError, SOMETHING_WENT_WRONG},
-    config::SingleJwt,
+use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
+
+use super::{
+    helpers::{access_token, email_token},
+    Environment,
 };
 
-use super::helpers::{access_token, email_token};
+#[derive(Clone, Debug)]
+struct SingleJwt {
+    secret: Secret<String>,
+    exp: i64,
+}
+
+impl SingleJwt {
+    fn new(secret: String, exp: i64) -> Self {
+        Self {
+            secret: Secret::new(secret),
+            exp,
+        }
+    }
+}
 
 pub enum TokenType {
     Reset,
@@ -43,21 +60,58 @@ pub struct Jwt {
 }
 
 impl Jwt {
-    pub fn new(
-        access_jwt: SingleJwt,
-        refresh_jwt: SingleJwt,
-        confirmation_jwt: SingleJwt,
-        reset_jwt: SingleJwt,
-        refresh_name: Secret<String>,
-        api_id: Secret<String>,
-    ) -> Self {
+    pub fn new(environment: &Environment, api_id: &str) -> Self {
+        let jwt_access_secret = env::var("ACCESS_SECRET").unwrap_or_else(|_| match environment {
+            Environment::Development => Uuid::new_v4().to_string(),
+            Environment::Production => {
+                panic!("Missing the JWT_ACCESS_SECRET environment variable.")
+            }
+        });
+        let jwt_refresh_secret = env::var("REFRESH_SECRET").unwrap_or_else(|_| match environment {
+            Environment::Development => Uuid::new_v4().to_string(),
+            Environment::Production => {
+                panic!("Missing the JWT_REFRESH_SECRET environment variable.")
+            }
+        });
+        let jwt_confirmation_secret =
+            env::var("CONFIRMATION_SECRET").unwrap_or_else(|_| match environment {
+                Environment::Development => Uuid::new_v4().to_string(),
+                Environment::Production => {
+                    panic!("Missing the JWT_CONFIRMATION_SECRET environment variable.")
+                }
+            });
+        let jwt_reset_secret = env::var("RESET_SECRET").unwrap_or_else(|_| match environment {
+            Environment::Development => Uuid::new_v4().to_string(),
+            Environment::Production => panic!("Missing the JWT_RESET_SECRET environment variable."),
+        });
+        let jwt_access_expiration = env::var("ACCESS_EXPIRATION")
+            .unwrap_or_else(|_| "600".to_string())
+            .parse::<i64>()
+            .unwrap_or(600);
+        let jwt_refresh_expiration = env::var("REFRESH_EXPIRATION")
+            .unwrap_or_else(|_| "259200".to_string())
+            .parse::<i64>()
+            .unwrap_or(259200);
+        let jwt_confirmation_expiration = env::var("CONFIRMATION_EXPIRATION")
+            .unwrap_or_else(|_| "86400".to_string())
+            .parse::<i64>()
+            .unwrap_or(86400);
+        let jwt_reset_expiration = env::var("RESET_EXPIRATION")
+            .unwrap_or_else(|_| "1800".to_string())
+            .parse::<i64>()
+            .unwrap_or(1800);
+        let refresh_name = env::var("REFRESH_NAME").unwrap_or_else(|_| match environment {
+            Environment::Development => "refresh".to_string(),
+            Environment::Production => panic!("Missing the REFRESH_NAME environment variable."),
+        });
+
         Self {
-            access: access_jwt,
-            reset: reset_jwt,
-            confirmation: confirmation_jwt,
-            refresh: refresh_jwt,
-            refresh_name,
-            iss: Uuid::parse_str(&api_id.expose_secret()).unwrap(),
+            access: SingleJwt::new(jwt_access_secret, jwt_access_expiration),
+            reset: SingleJwt::new(jwt_reset_secret, jwt_reset_expiration),
+            confirmation: SingleJwt::new(jwt_confirmation_secret, jwt_confirmation_expiration),
+            refresh: SingleJwt::new(jwt_refresh_secret, jwt_refresh_expiration),
+            refresh_name: Secret::new(refresh_name),
+            iss: Uuid::parse_str(api_id).unwrap(),
         }
     }
 

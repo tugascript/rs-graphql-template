@@ -4,9 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::env;
+
 use anyhow::Error;
 use sea_orm::DatabaseConnection;
-use secrecy::{ExposeSecret, Secret};
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -14,8 +15,10 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new(url: &Secret<String>) -> Result<Self, Error> {
-        let connection = sea_orm::Database::connect(url.expose_secret()).await?;
+    pub async fn new() -> Result<Self, Error> {
+        let database_url =
+            env::var("DATABASE_URL").expect("Missing the DATABASE_URL environment variable.");
+        let connection = sea_orm::Database::connect(&database_url).await?;
 
         Ok(Self { connection })
     }

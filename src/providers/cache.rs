@@ -4,9 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use anyhow::Error;
 use redis::{aio::Connection, Client};
-use secrecy::{ExposeSecret, Secret};
+use std::env;
 
 use crate::common::{ServiceError, INTERNAL_SERVER_ERROR};
 
@@ -16,10 +15,10 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn new(url: &Secret<String>) -> Result<Self, Error> {
-        let client = Client::open(url.expose_secret().to_owned())?;
-
-        Ok(Self { client })
+    pub fn new() -> Self {
+        let redis_url = env::var("REDIS_URL").expect("Missing the REDIS_URL environment variable.");
+        let client = Client::open(redis_url).expect("Failed to create Redis client.");
+        Self { client }
     }
 
     pub async fn get_connection(&self) -> Result<Connection, ServiceError> {

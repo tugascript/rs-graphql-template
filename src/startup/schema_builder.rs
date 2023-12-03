@@ -29,7 +29,7 @@ pub struct QueryRoot(
 pub fn build_schema(
     database: &Database,
     jwt: &Jwt,
-    object_storage: &ObjectStorage,
+    object_storage: ObjectStorage,
 ) -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
     Schema::build(
         QueryRoot::default(),
@@ -42,7 +42,7 @@ pub fn build_schema(
     ))
     .data(database.to_owned())
     .data(jwt.to_owned())
-    .data(object_storage.to_owned())
+    .data(object_storage)
     .finish()
 }
 

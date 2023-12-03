@@ -4,10 +4,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::env;
+
 use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
 
 use entities::enums::OAuthProviderEnum;
-use secrecy::{ExposeSecret, Secret};
 
 use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
 
@@ -50,22 +51,18 @@ pub struct OAuth {
 }
 
 impl OAuth {
-    pub fn new(
-        google_id: String,
-        google_secret: &Secret<String>,
-        facebook_id: String,
-        facebook_secret: &Secret<String>,
-        backend_url: String,
-    ) -> Self {
+    pub fn new(backend_url: String) -> Self {
+        let google_client_id = env::var("GOOGLE_CLIENT_ID")
+            .expect("Missing the GOOGLE_CLIENT_ID environment variable.");
+        let google_client_secret = env::var("GOOGLE_CLIENT_SECRET")
+            .expect("Missing the GOOGLE_CLIENT_SECRET environment variable.");
+        let facebook_client_id = env::var("FACEBOOK_CLIENT_ID")
+            .expect("Missing the FACEBOOK_CLIENT_ID environment variable.");
+        let facebook_client_secret = env::var("FACEBOOK_CLIENT_SECRET")
+            .expect("Missing the FACEBOOK_CLIENT_SECRET environment variable.");
         Self {
-            google: Self::build_client_credentials(
-                google_id,
-                google_secret.expose_secret().to_owned(),
-            ),
-            facebook: Self::build_client_credentials(
-                facebook_id,
-                facebook_secret.expose_secret().to_owned(),
-            ),
+            google: Self::build_client_credentials(google_client_id, google_client_secret),
+            facebook: Self::build_client_credentials(facebook_client_id, facebook_client_secret),
             url: format!("{}/api/auth/ext", backend_url),
         }
     }

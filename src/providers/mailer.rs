@@ -4,16 +4,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::env;
+
 use lettre::{
     transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message,
     Tokio1Executor,
 };
-use secrecy::{ExposeSecret, Secret};
 
-use crate::{
-    common::{ServiceError, SOMETHING_WENT_WRONG},
-    config::Environment,
-};
+use crate::common::{ServiceError, SOMETHING_WENT_WRONG};
+
+use super::Environment;
 
 #[derive(Clone, Debug)]
 pub struct Mailer {
@@ -24,26 +24,28 @@ pub struct Mailer {
 }
 
 impl Mailer {
-    pub fn new(
-        environment: Environment,
-        host: String,
-        port: u16,
-        user: String,
-        password: &Secret<String>,
-        frontend_url: String,
-    ) -> Self {
-        let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&host)
+    pub fn new(environment: &Environment, frontend_url: String) -> Self {
+        let email_host = env::var("EMAIL_HOST").unwrap_or_else(|_| match environment {
+            Environment::Development => "smtp.mailtrap.io".to_string(),
+            Environment::Production => panic!("Missing the EMAIL_HOST environment variable."),
+        });
+        let email_port = env::var("EMAIL_PORT")
+            .expect("Missing the EMAIL_PORT environment variable.")
+            .parse::<u16>()
+            .expect("EMAIL_PORT must be a number.");
+        let email_user =
+            env::var("EMAIL_USER").expect("Missing the EMAIL_USER environment variable.");
+        let email_password =
+            env::var("EMAIL_PASSWORD").expect("Missing the EMAIL_PASSWORD environment variable.");
+        let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&email_host)
             .unwrap()
-            .port(port)
-            .credentials(Credentials::new(
-                user.clone(),
-                password.expose_secret().to_owned(),
-            ))
+            .port(email_port)
+            .credentials(Credentials::new(email_user.clone(), email_password))
             .build();
 
         Self {
-            environment,
-            email: user,
+            environment: environment.clone(),
+            email: email_user,
             frontend_url,
             mailer,
         }

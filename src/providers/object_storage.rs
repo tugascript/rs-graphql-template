@@ -4,12 +4,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::env;
+
 use rusoto_core::{credential::StaticProvider, HttpClient, Region};
 use rusoto_s3::{PutObjectRequest, S3Client, S3};
-use secrecy::{ExposeSecret, Secret};
 use uuid::Uuid;
 
 use crate::common::{ServiceError, INTERNAL_SERVER_ERROR};
+
+use super::Environment;
 
 #[derive(Clone)]
 pub struct ObjectStorage {
@@ -20,26 +23,44 @@ pub struct ObjectStorage {
 }
 
 impl ObjectStorage {
-    pub fn new(
-        region: String,
-        host: String,
-        bucket: String,
-        access_key: &Secret<String>,
-        secret_key: &Secret<String>,
-        namespace: &Secret<String>,
-    ) -> Self {
-        let endpoint = format!("https://{}.{}", region, host);
-        let namespace = Uuid::parse_str(namespace.expose_secret()).unwrap();
+    pub fn new(environment: &Environment) -> Self {
+        let object_storage_host = env::var("OBJECT_STORAGE_HOST")
+            .expect("Missing the OBJECT_STORAGE_HOST environment variable.");
+        let object_storage_access_key = env::var("OBJECT_STORAGE_ACCESS_KEY")
+            .expect("Missing the OBJECT_STORAGE_ACCESS_KEY environment variable.");
+        let object_storage_secret_key = env::var("OBJECT_STORAGE_SECRET_KEY")
+            .expect("Missing the OBJECT_STORAGE_SECRET_KEY environment variable.");
+        let object_storage_bucket = env::var("OBJECT_STORAGE_BUCKET")
+            .expect("Missing the OBJECT_STORAGE_BUCKET environment variable.");
+        let object_storage_region = env::var("OBJECT_STORAGE_REGION")
+            .expect("Missing the OBJECT_STORAGE_REGION environment variable.");
+        let object_storage_namespace =
+            env::var("OBJECT_STORAGE_NAMESPACE").unwrap_or_else(|_| match environment {
+                &Environment::Development => Uuid::new_v4().to_string(),
+                &Environment::Production => {
+                    panic!("Missing the OBJECT_STORAGE_HOST environment variable.")
+                }
+            });
+        let domain = match environment {
+            &Environment::Development => object_storage_host,
+            &Environment::Production => {
+                format!("{}.{}", object_storage_region, object_storage_host)
+            }
+        };
 
+        let namespace = Uuid::parse_str(&object_storage_namespace).unwrap();
         let region = Region::Custom {
-            name: "custom".to_string(),
-            endpoint: endpoint.to_string(),
+            name: object_storage_region,
+            endpoint: match environment {
+                &Environment::Development => format!("http://{}", &domain),
+                &Environment::Production => format!("https://{}", &domain),
+            },
         };
         let client = S3Client::new_with(
-            HttpClient::new().unwrap(),
+            HttpClient::new().expect("Failed to create HTTP client"),
             StaticProvider::new(
-                access_key.expose_secret().to_owned(),
-                secret_key.expose_secret().to_owned(),
+                object_storage_access_key,
+                object_storage_secret_key,
                 None,
                 None,
             ),
@@ -47,8 +68,15 @@ impl ObjectStorage {
         );
         Self {
             client,
-            bucket,
-            endpoint,
+            endpoint: match environment {
+                &Environment::Development => {
+                    format!("http://{}/{}", domain, &object_storage_bucket)
+                }
+                &Environment::Production => {
+                    format!("https://{}.{}", &object_storage_bucket, domain)
+                }
+            },
+            bucket: object_storage_bucket,
             namespace,
         }
     }
@@ -56,11 +84,17 @@ impl ObjectStorage {
     pub async fn upload_file(
         &self,
         user_id: i32,
-        file_key: &str,
+        file_key: &Uuid,
+        file_extension: &str,
         file_contents: Vec<u8>,
     ) -> Result<String, ServiceError> {
         let user_prefix = Uuid::new_v5(&self.namespace, user_id.to_string().as_bytes()).to_string();
-        let combined_key = format!("{}/{}", &user_prefix, file_key);
+        let combined_key = format!(
+            "{}/{}.{}",
+            &user_prefix,
+            file_key.to_string(),
+            file_extension
+        );
         let request = PutObjectRequest {
             bucket: self.bucket.to_string(),
             key: combined_key.clone(),

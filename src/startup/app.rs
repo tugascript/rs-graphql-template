@@ -11,10 +11,11 @@ use actix_web::{dev::Server, web, App, HttpServer};
 use anyhow::Error;
 use tracing_actix_web::TracingLogger;
 
-use crate::config::Config;
 use crate::controllers::auth_controller::auth_router;
 use crate::controllers::health_controller::health_router;
-use crate::providers::{Cache, Database, Jwt, Mailer, OAuth, ObjectStorage};
+use crate::providers::{
+    ApiURLs, Cache, Database, Environment, Jwt, Mailer, OAuth, ObjectStorage, ServerLocation,
+};
 
 use super::schema_builder::{build_schema, graphql_playground, graphql_request};
 
@@ -25,15 +26,19 @@ pub struct ActixApp {
 
 impl ActixApp {
     pub async fn new() -> Result<Self, Error> {
-        let config = Config::new();
-        let (host, port) = config.app_config();
-        let db = Database::new(config.database_config()).await?;
-        let listener = TcpListener::bind(format!("{}:{}", host, port))?;
+        if dotenvy::dotenv().is_err() {
+            println!("No .env file found");
+            println!("Using environment variables instead");
+        }
+
+        let ServerLocation(host, port) = ServerLocation::new();
+        let db = Database::new().await?;
+        let listener = TcpListener::bind(format!("{}:{}", &host, &port))?;
         let port = listener.local_addr().unwrap().port();
         let server = HttpServer::new(move || {
             App::new()
                 .wrap(TracingLogger::default())
-                .configure(Self::build_app_config(&config, &db))
+                .configure(Self::build_app_config(Environment::new(), port, &db))
         })
         .listen(listener)?
         .run();
@@ -48,60 +53,37 @@ impl ActixApp {
         self.server.await
     }
 
-    pub fn build_app_config(config: &Config, db: &Database) -> impl Fn(&mut web::ServiceConfig) {
-        let (access_jwt, refresh_jwt, confirmation_jwt, reset_jwt) = config.jwt_config();
-        let jwt = Jwt::new(
-            access_jwt,
-            refresh_jwt,
-            confirmation_jwt,
-            reset_jwt,
-            config.refresh_name(),
-            config.api_id(),
-        );
-        let (email_host, email_port, email_user, email_password) = config.email_config();
-        let mailer = Mailer::new(
-            config.get_environment(),
-            email_host,
-            email_port,
-            email_user,
-            email_password,
-            config.frontend_url(),
-        );
-        let (google_id, google_secret) = config.google_config();
-        let (facebook_id, facebook_secret) = config.facebook_config();
-        let oauth = OAuth::new(
-            google_id,
-            google_secret,
-            facebook_id,
-            facebook_secret,
-            config.backend_url(),
-        );
-        let (region, host, bucket, access_key, secret_key, namespace) =
-            config.object_storage_config();
-        let object_storage =
-            ObjectStorage::new(region, host, bucket, access_key, secret_key, namespace);
+    pub fn build_app_config(
+        environment: Environment,
+        port: u16,
+        db: &Database,
+    ) -> impl Fn(&mut web::ServiceConfig) {
         let db = db.clone();
-        let cache = Cache::new(config.cache_config()).unwrap();
         move |cfg: &mut web::ServiceConfig| {
-            let schema = build_schema(&db, &jwt, &object_storage);
-            cfg.app_data(web::Data::new(schema))
-                .service(
-                    web::resource("/api/graphql")
-                        .guard(guard::Post())
-                        .to(graphql_request),
-                )
-                .service(
-                    web::resource("/api/graphql")
-                        .guard(guard::Get())
-                        .to(graphql_playground),
-                )
-                .app_data(web::Data::new(oauth.clone()))
-                .app_data(web::Data::new(db.clone()))
-                .app_data(web::Data::new(cache.clone()))
-                .app_data(web::Data::new(jwt.clone()))
-                .app_data(web::Data::new(mailer.clone()))
-                .service(auth_router())
-                .service(health_router());
+            let urls = ApiURLs::new(&environment, port);
+            let jwt = Jwt::new(&environment, &urls.api_id);
+            cfg.app_data(web::Data::new(build_schema(
+                &db,
+                &jwt,
+                ObjectStorage::new(&environment),
+            )))
+            .service(
+                web::resource("/api/graphql")
+                    .guard(guard::Post())
+                    .to(graphql_request),
+            )
+            .service(
+                web::resource("/api/graphql")
+                    .guard(guard::Get())
+                    .to(graphql_playground),
+            )
+            .app_data(web::Data::new(OAuth::new(urls.backend_url)))
+            .app_data(web::Data::new(db.clone()))
+            .app_data(web::Data::new(Cache::new()))
+            .app_data(web::Data::new(jwt))
+            .app_data(web::Data::new(Mailer::new(&environment, urls.frontend_url)))
+            .service(auth_router())
+            .service(health_router());
         }
     }
 }

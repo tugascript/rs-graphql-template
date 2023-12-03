@@ -5,7 +5,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 mod common;
-mod config;
 mod controllers;
 mod data_loaders;
 mod dtos;
@@ -15,6 +14,3 @@ mod providers;
 mod resolvers;
 mod services;
 pub mod startup;
-
-#[cfg(test)]
-pub mod tests {}
