@@ -262,7 +262,7 @@ pub async fn query(
     Ok((users, count, previous_count))
 }
 
-pub async fn update_picture(ctx: &Context<'_>, upload: Upload) -> Result<Model, GqlError> {
+pub async fn update_picture(ctx: &Context<'_>, picture: Upload) -> Result<Model, GqlError> {
     let access_user = AccessUser::get_access_user(ctx)?;
     let db = ctx.data::<Database>()?;
     let user = find_one_by_id(db, access_user.id).await?;
@@ -272,7 +272,7 @@ pub async fn update_picture(ctx: &Context<'_>, upload: Upload) -> Result<Model, 
         Some(access_user.id),
         Some(db),
         Some(object_storage),
-        upload,
+        picture,
         Ratio::Square,
     )
     .await?;

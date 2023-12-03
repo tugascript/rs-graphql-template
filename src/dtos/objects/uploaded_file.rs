@@ -28,7 +28,7 @@ pub struct UploadedFile {
 impl From<Model> for UploadedFile {
     fn from(value: Model) -> Self {
         Self {
-            id: value.id,
+            id: value.id.to_string(),
             url: value.url,
             user_id: value.user_id,
             extension: value.extension,

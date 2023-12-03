@@ -40,7 +40,7 @@ fn generate_random_code() -> String {
 }
 
 fn generate_email_code() -> Result<(String, String), ServiceError> {
-    tracing::trace_span!("Generating random access code");
+    tracing::info!("Generating random access code");
     let code = generate_random_code();
     let code_hash = hash(&code, 5)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
@@ -48,7 +48,7 @@ fn generate_email_code() -> Result<(String, String), ServiceError> {
 }
 
 fn verify_code(code: &str, hashed_code: &str) -> bool {
-    tracing::trace_span!("Verifying access code");
+    tracing::info!("Verifying access code");
     if let Ok(result) = verify(code, hashed_code) {
         return result;
     }
@@ -61,7 +61,7 @@ async fn find_oauth_provider(
     email: &str,
     provider: OAuthProviderEnum,
 ) -> Result<oauth_provider::Model, ServiceError> {
-    tracing::trace_span!("Finding OAuth provider", provider = %provider.to_str());
+    tracing::info!("Finding OAuth provider: {}", provider.to_str());
     let provider = oauth_provider::Entity::find_by_email_and_provider(email, provider)
         .one(db.get_connection())
         .await?;
@@ -77,12 +77,11 @@ async fn find_oauth_provider(
 
 async fn create_code(
     cache: &Cache,
-    user_id: i32,
     email: &str,
     code_hash: String,
     exp: i64,
 ) -> Result<(), ServiceError> {
-    tracing::trace_span!("Creating two factor code", id = %user_id);
+    tracing::info!("Creating two factor code");
     let exp_usize = usize::try_from(exp)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     let key = format!("access_code:{}", email);
@@ -95,6 +94,7 @@ async fn create_code(
 }
 
 async fn validate_code(cache: &Cache, email: &str, code: &str) -> Result<(), ServiceError> {
+    tracing::info!("Validating two factor code");
     let key = format!("access_code:{}", email);
     let mut connection = cache.get_connection().await?;
     let hashed_code: Option<String> = connection
@@ -141,10 +141,10 @@ pub async fn sign_up(
         OAuthProviderEnum::Local,
     )
     .await?;
-    tracing::trace_span!("User created");
+    tracing::info!("User created");
     let confirmation_token = jwt.generate_email_token(TokenType::Confirmation, &user)?;
     mailer.send_confirmation_email(&user.email, &user.full_name(), &confirmation_token)?;
-    tracing::trace_span!("Successfully signed up user", id = %user.id);
+    tracing::info!("Successfully signed up user");
     Ok(())
 }
 
@@ -154,17 +154,16 @@ pub async fn confirm_email(
     token: &str,
 ) -> Result<responses::Auth, ServiceError> {
     tracing::info_span!("auth_service::confirm_email");
-    tracing::trace_span!("Verifying confirmation token");
     let (id, version, _, _) = jwt.verify_email_token(TokenType::Confirmation, token)?;
     let user = users_service::find_one_by_version(db, id, version).await?;
-    tracing::trace_span!("Confirming user");
+    tracing::info!("User found with id {}", id);
     let mut user: user::ActiveModel = user.into();
     user.confirmed = Set(true);
     user.version = Set(version + 1);
     let user = user.update(db.get_connection()).await?;
 
     let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
-    tracing::trace_span!("Successfully confirmed user", id = %user.id);
+    tracing::info!("Successfully confirmed user with id {}", id);
     Ok(responses::Auth::new(
         access_token,
         refresh_token,
@@ -179,11 +178,11 @@ pub async fn sign_in(
     mailer: &Mailer,
     body: bodies::SignIn,
 ) -> Result<responses::SignIn, ServiceError> {
-    tracing::info_span!("Local signing in");
+    tracing::info_span!("auth_service::sign_in");
     let user = users_service::find_one_by_email(db, &body.email.to_lowercase()).await?;
 
     if !user.confirmed {
-        tracing::trace_span!("User not confirmed", id = %user.id);
+        tracing::warn!("User with id {} not confirmed", user.id);
         let confirmation_token = jwt.generate_email_token(TokenType::Confirmation, &user)?;
         mailer.send_confirmation_email(&user.email, &user.full_name(), &confirmation_token)?;
         return Err(ServiceError::unauthorized::<ServiceError>(
@@ -192,14 +191,14 @@ pub async fn sign_in(
         ));
     }
     if user.suspended {
-        tracing::trace_span!("User suspended", id = %user.id);
+        tracing::warn!("User with id {} suspended", user.id);
         return Err(ServiceError::forbidden::<ServiceError>(
             "Your account has been suspended",
             None,
         ));
     }
     if !verify_password(&body.password, &user.password) {
-        tracing::trace_span!("Invalid credentials", id = %user.id);
+        tracing::warn!("User with id {} did not pass the correct password", user.id);
         return Err(ServiceError::unauthorized::<ServiceError>(
             INVALID_CREDENTIALS,
             None,
@@ -208,23 +207,22 @@ pub async fn sign_in(
 
     let provider = find_oauth_provider(db, &user.email, OAuthProviderEnum::Local).await?;
     if provider.two_factor {
-        tracing::trace_span!("Two factor authentication enabled", id = %user.id);
+        tracing::info!("User with id {} has two factor enabled", user.id);
         let (code, code_hash) = generate_email_code()?;
         create_code(
             cache,
-            user.id,
             &user.email,
             code_hash,
             jwt.get_email_token_time(TokenType::Confirmation),
         )
         .await?;
         mailer.send_access_email(&user.email, &user.full_name(), &code)?;
-        tracing::info_span!("Sign in successful", id = %user.id);
+        tracing::info!("User with id {} successfully sign in with MFA", user.id);
         return Ok(responses::SignIn::Mfa);
     }
 
     let (access_token, refresh_token) = jwt.generate_auth_tokens(&user)?;
-    tracing::info_span!("Sign in successful", id = %user.id);
+    tracing::info!("User with id {} successfully sign in without MFA", user.id);
     Ok(responses::SignIn::Auth(responses::Auth::new(
         access_token,
         refresh_token,
@@ -238,6 +236,7 @@ pub async fn confirm_sign_in(
     jwt: &Jwt,
     body: bodies::ConfirmSignIn,
 ) -> Result<responses::Auth, ServiceError> {
+    tracing::info_span!("auth_service::confirm_sign_in");
     let email = body.email.to_lowercase();
     let user = users_service::find_one_by_email(db, &email).await?;
     validate_code(cache, &email, &body.code).await?;
@@ -265,6 +264,7 @@ pub async fn refresh_token(
     jwt: &Jwt,
     refresh_token: &str,
 ) -> Result<responses::Auth, ServiceError> {
+    tracing::info_span!("auth_service::refresh_token");
     let (id, version, token_id, exp) =
         jwt.verify_email_token(TokenType::Refresh, &refresh_token)?;
 
@@ -291,7 +291,7 @@ pub async fn forgot_password(
     mailer: &Mailer,
     email: &str,
 ) -> Result<(), ServiceError> {
-    tracing::info_span!("auth_service::reset_password_email");
+    tracing::info_span!("auth_service::forgot_password");
     let email = email.to_lowercase();
 
     if let Err(err) = find_oauth_provider(db, &email, OAuthProviderEnum::Local).await {
@@ -326,6 +326,7 @@ pub async fn reset_password(
     jwt: &Jwt,
     body: bodies::ResetPassword,
 ) -> Result<(), ServiceError> {
+    tracing::info_span!("auth_service::reset_password");
     let (id, version, _, _) = jwt.verify_email_token(TokenType::Reset, &body.reset_token)?;
 
     if body.password1 != body.password2 {
@@ -352,6 +353,7 @@ pub async fn update_password(
     access_token: &str,
     refresh_token: &Option<String>,
 ) -> Result<responses::Auth, ServiceError> {
+    tracing::info_span!("auth_service::update_password");
     let (id, _) = jwt.verify_access_token(&access_token)?;
     let user = users_service::find_one_by_id(db, id).await?;
     let user_version = user.version;
@@ -391,6 +393,7 @@ pub async fn update_two_factor(
     body: bodies::ChangeTwoFactor,
     access_token: &str,
 ) -> Result<(), ServiceError> {
+    tracing::info_span!("auth_service::update_two_factor");
     let (id, _) = jwt.verify_access_token(&access_token)?;
     let user = users_service::find_one_by_id(db, id).await?;
     let oauth_provider = find_oauth_provider(db, &user.email, OAuthProviderEnum::Local).await?;
@@ -424,6 +427,7 @@ async fn create_blacklisted_token(
 }
 
 pub async fn sign_out(cache: &Cache, jwt: &Jwt, refresh_token: &str) -> Result<(), ServiceError> {
+    tracing::info_span!("auth_service::sign_out");
     let (id, _, token_id, exp) = jwt.verify_email_token(TokenType::Refresh, refresh_token)?;
 
     if check_blacklist(cache, &token_id).await? {
@@ -475,6 +479,7 @@ pub async fn oauth_sign_in(
     oauth: &OAuth,
     provider: ExternalProvider,
 ) -> Result<String, ServiceError> {
+    tracing::info_span!("auth_service::oauth_sign_in");
     let scopes = oauth.get_external_client_scopes(&provider);
     let client = oauth.get_external_client(&provider)?;
     let mut request = client.authorize_url(CsrfToken::new_random);
@@ -503,6 +508,7 @@ pub async fn oauth_callback(
     provider: ExternalProvider,
     query: queries::OAuth,
 ) -> Result<responses::Auth, ServiceError> {
+    tracing::info_span!("auth_service::oauth_callback");
     let client = oauth.get_external_client(&provider)?;
     let verifier = get_csrf_token(cache, &provider, &query.state).await?;
 

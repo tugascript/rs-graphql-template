@@ -10,6 +10,7 @@ use chrono::{NaiveDate, Utc};
 
 use entities::enums::RoleEnum;
 use entities::user::Model;
+use uuid::Uuid;
 
 use crate::data_loaders::{FileId, SeaOrmLoader};
 use crate::helpers::AccessUser;
@@ -24,7 +25,7 @@ pub struct User {
     #[graphql(skip)]
     pub email: String,
     #[graphql(skip)]
-    pub picture: Option<String>,
+    pub picture: Option<Uuid>,
     pub username: String,
     pub first_name: String,
     pub last_name: String,

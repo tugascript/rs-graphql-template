@@ -12,7 +12,7 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 #[sea_orm(table_name = "uploaded_files")]
 pub struct Model {
     #[sea_orm(primary_key, column_type = "Uuid", auto_increment = false)]
-    pub id: String,
+    pub id: Uuid,
     #[sea_orm(column_type = "String(Some(200))")]
     pub url: String,
     pub user_id: i32,

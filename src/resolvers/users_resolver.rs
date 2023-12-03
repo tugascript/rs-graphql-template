@@ -84,8 +84,8 @@ impl UsersQuery {
 #[Object]
 impl UsersMutation {
     #[graphql(guard = "AuthGuard")]
-    async fn update_user_picture(&self, ctx: &Context<'_>, upload: Upload) -> Result<User> {
-        Ok(users_service::update_picture(ctx, upload).await?.into())
+    async fn update_user_picture(&self, ctx: &Context<'_>, picture: Upload) -> Result<User> {
+        Ok(users_service::update_picture(ctx, picture).await?.into())
     }
 
     #[graphql(guard = "AuthGuard")]

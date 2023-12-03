@@ -73,9 +73,9 @@ impl ServiceError {
         let error = Self::InternalServerError(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(INTERNAL_SERVER_ERROR, %message, %cause);
+            tracing::error!(INTERNAL_SERVER_ERROR, %message, %cause);
         } else {
-            tracing::error_span!(INTERNAL_SERVER_ERROR, %message);
+            tracing::error!(INTERNAL_SERVER_ERROR, %message);
         }
 
         error
@@ -88,9 +88,9 @@ impl ServiceError {
         let error = Self::BadRequest(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(BAD_REQUEST, %message, %cause);
+            tracing::error!(BAD_REQUEST, %message, %cause);
         } else {
-            tracing::error_span!(BAD_REQUEST, %message);
+            tracing::error!(BAD_REQUEST, %message);
         }
 
         error
@@ -103,9 +103,9 @@ impl ServiceError {
         let error = Self::Unauthorized(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(UNAUTHORIZED, %message, %cause);
+            tracing::error!(UNAUTHORIZED, %message, %cause);
         } else {
-            tracing::error_span!(UNAUTHORIZED, %message);
+            tracing::error!(UNAUTHORIZED, %message);
         }
 
         error
@@ -118,9 +118,9 @@ impl ServiceError {
         let error = Self::NotFound(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(NOT_FOUND, %message, %cause);
+            tracing::error!(NOT_FOUND, %message, %cause);
         } else {
-            tracing::error_span!(NOT_FOUND, %message);
+            tracing::error!(NOT_FOUND, %message);
         }
 
         error
@@ -133,9 +133,9 @@ impl ServiceError {
         let error = Self::Forbidden(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(FORBIDDEN, %message, %cause);
+            tracing::error!(FORBIDDEN, %message, %cause);
         } else {
-            tracing::error_span!(FORBIDDEN, %message);
+            tracing::error!(FORBIDDEN, %message);
         }
 
         error
@@ -148,9 +148,9 @@ impl ServiceError {
         let error = Self::Conflict(message.to_string());
 
         if let Some(cause) = cause {
-            tracing::error_span!(CONFLICT, %message, %cause);
+            tracing::error!(CONFLICT, %message, %cause);
         } else {
-            tracing::error_span!(CONFLICT, %message);
+            tracing::error!(CONFLICT, %message);
         }
 
         error

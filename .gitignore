@@ -1,3 +1,7 @@
 /target
 .idea
 .env
+.vscode
+/localstack
+/localstack_data
+/data

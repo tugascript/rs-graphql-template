@@ -29,7 +29,7 @@ pub struct Model {
     #[sea_orm(column_type = "String(Some(5))", default_value = "USER")]
     pub role: RoleEnum,
     #[sea_orm(column_type = "Uuid", nullable)]
-    pub picture: Option<String>,
+    pub picture: Option<Uuid>,
     #[sea_orm(column_type = "SmallInteger", default_value = 0)]
     pub version: i16,
     #[sea_orm(column_type = "Boolean", default_value = false)]

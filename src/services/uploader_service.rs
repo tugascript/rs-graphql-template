@@ -24,7 +24,7 @@ use crate::providers::Database;
 use crate::{dtos::ratio::Ratio, providers::ObjectStorage};
 
 type ImageData = Vec<u8>;
-type ImageId = String;
+type ImageId = Uuid;
 
 fn load_file_data(mut file: File) -> Result<Vec<u8>, ServiceError> {
     let mut buffer = Vec::<u8>::new();
@@ -38,6 +38,7 @@ fn image_processor(
     file: Upload,
     ratio: Ratio,
 ) -> Result<(ImageId, ImageData), ServiceError> {
+    tracing::info!("Processing image...");
     let file_info = file
         .value(ctx)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
@@ -49,14 +50,18 @@ fn image_processor(
         ))?;
 
     if !file_type.contains("image") {
+        tracing::warn!("File is not an image");
         return Err(ServiceError::bad_request::<AnyHowError>("File is not an image", None).into());
     }
 
+    tracing::info!("Loading image data...");
     let image_data = load_file_data(file_info.content)?;
     let image_control = image::load_from_memory(&image_data)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
-    let (width, height) = image_control.dimensions();
+    tracing::info!("Successfully loaded image data of type: {}", file_type);
 
+    tracing::info!("Cropping image...");
+    let (width, height) = image_control.dimensions();
     let cropped_image = match ratio {
         // Ratio::None => image_control,
         Ratio::Square => {
@@ -85,13 +90,16 @@ fn image_processor(
           //     image_control.crop_imm(x_offset, y_offset, width_size, min(height_size, height))
           // }
     };
-    let mut compressed_buffer = Cursor::new(Vec::<u8>::new());
+    tracing::info!("Successfully cropped image");
 
+    tracing::info!("Compressing image...");
+    let mut compressed_buffer = Cursor::new(Vec::<u8>::new());
     cropped_image
         .write_to(&mut compressed_buffer, Jpeg(80))
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
+    tracing::info!("Successfully compressed image");
 
-    Ok((Uuid::new_v4().to_string(), compressed_buffer.into_inner()))
+    Ok((Uuid::new_v4(), compressed_buffer.into_inner()))
 }
 
 pub async fn upload_image(
@@ -117,13 +125,13 @@ pub async fn upload_image(
     };
     let (image_id, image_data) = image_processor(ctx, file, ratio)?;
     let url = object_storage
-        .upload_file(user_id, &image_id, image_data)
+        .upload_file(user_id, &image_id, "jpg", image_data)
         .await?;
     let uploaded_file = ActiveModel {
         id: Set(image_id),
         user_id: Set(user_id),
         url: Set(url),
-        extension: Set("png".to_string()),
+        extension: Set("jpg".to_string()),
         ..Default::default()
     }
     .insert(db.get_connection())
@@ -139,7 +147,7 @@ pub async fn find_one_by_id(db: &Database, id: &str) -> Result<Model, ServiceErr
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
 
     if let Some(file) = uploaded_file {
-        tracing::info_span!("File found");
+        tracing::info!("File found");
         return Ok(file);
     }
 

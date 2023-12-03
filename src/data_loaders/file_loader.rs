@@ -10,18 +10,19 @@ use async_graphql::{Error, Result};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use entities::uploaded_file::{Column, Entity};
+use uuid::Uuid;
 
 use crate::common::{InternalCause, ServiceError};
 use crate::dtos::objects::UploadedFile;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
-pub struct FileId(pub String);
+pub struct FileId(pub Uuid);
 
 pub async fn load_files(
     connection: &DatabaseConnection,
     keys: &[FileId],
 ) -> Result<HashMap<FileId, UploadedFile>> {
-    let ids = keys.iter().map(|key| key.0.as_str()).collect::<Vec<&str>>();
+    let ids = keys.iter().map(|key| key.0).collect::<Vec<Uuid>>();
     let files = Entity::find()
         .filter(Column::Id.is_in(ids))
         .all(connection)
@@ -39,7 +40,7 @@ pub async fn load_files(
     let mut files_map = HashMap::<FileId, UploadedFile>::new();
 
     for file in files {
-        files_map.insert(FileId(file.id.to_string()), file.into());
+        files_map.insert(FileId(file.id), file.into());
     }
 
     Ok(files_map)

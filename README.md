@@ -1,6 +1,6 @@
 # Rust GraphQL Template
 
-## **THIS PROJECT IS STILL ON GOING AND UNTESTED, USE IT AT YOUR OWN RISK**
+**THIS PROJECT IS STILL ONGOING, USE IT ON YOUR OWN RISK**
 
 A full feature template to develop server-side GraphQL APIs using Rust for data and processor heavy APIs.
 
@@ -20,13 +20,13 @@ Three services are implemented:
 
 - Local and External OAuth 2.0 authentication in REST;
 - User CRUD;
-- File upload;
+- Image upload with compression (it needs to be improved, very slow performance);
 
 ## How to use it
 
 Just click on the `Use this template` button and follow the instructions.
 
-### Project Structure
+## Project Structure
 
 The project is divided into workspaces:
 
@@ -44,16 +44,24 @@ The App tries to follow a basic MSC/MSR (Model, Service, Controller/Resolver) pa
 - `Resolver` is the GraphQL resolver that will be used to expose in the API the data for a specific Data Model;
 - `Providers` are the external services that will be used by the App, like the DB, the OAuth2 provider, etc;
 
-### How to run it
+## How to run it locally
 
-To run the project you need to have the following tools installed:
+### OS and Software requirements
 
-- Docker or Podman: to be able to run the DB and Cache;
-- Rust: to be able to run the App;
+This template requires a MacOS or Linux machine with the following applications installed:
+
+- _[Docker](https://www.docker.com/) or [Podman](https://podman.io/)_: to be able to run the PostgreSQL database, Redis Cache and the Object Storage;
+- _[Rust](https://www.rust-lang.org/)_: to be able to run and devolep this template;
+- _[AWS CLI](https://aws.amazon.com/pt/cli/)_: to be able to run the Object Storage;
+
+### Configuration
 
 Create a `.env` file in the root of the project with the following content:
 
 ```dotenv
+# Environment Setup
+ENV="development"
+
 # TCP port
 PORT=5000
 
@@ -71,41 +79,83 @@ RESET_TIME=1800
 REFRESH_SECRET="random_string"
 REFRESH_TIME=604800
 REFRESH_NAME="cookie_name"
-API_ID="00000000-0000-0000-0000-000000000000"
 
 # Email Setup
 EMAIL_HOST="smtp.gmail.com"
 EMAIL_PORT=587
 EMAIL_USER="johndoe@gmail.com"
 EMAIL_PASSWORD="your_email_password"
-FRONT_END_URL="http://localhost:3000"
+
+# URL Setup
+API_ID="00000000-0000-0000-0000-000000000000"
+FRONTEND_URL="http://localhost:3000"
+BACKEND_URL="http://localhost:5000"
 
 # External OAuth Setup
 GOOGLE_CLIENT_ID="000000000000"
 GOOGLE_CLIENT_SECRET="000000000000"
 FACEBOOK_CLIENT_ID="000000000000"
 FACEBOOK_CLIENT_SECRET="000000000000"
-BACKEND_URL="http://localhost:5000"
 
 # Object Storage Setup
-OBJECT_STORAGE_BUCKET="linode_or_aws_bucket_name"
-OBJECT_STORAGE_SECRET_KEY="bucket_secret_key"
-OBJECT_STORAGE_ACCESS_KEY="bucket_access_key"
-OBJECT_STORAGE_REGION="bucket_region"
-OBJECT_STORAGE_HOST="digitalocean"
+OBJECT_STORAGE_BUCKET="test"
+OBJECT_STORAGE_SECRET_KEY="test"
+OBJECT_STORAGE_ACCESS_KEY="test"
+OBJECT_STORAGE_REGION="us-east-1"
+OBJECT_STORAGE_HOST="localhost:4566"
 OBJECT_STORAGE_NAMESPACE="00000000-0000-0000-0000-000000000000"
 ```
 
-Run the following commands.
+### How to run it
+
+Install necessary cargo crates:
 
 ```bash
-$ cargo install sqlx-cli
-$ cargo install sea-orm-cli
-$ podman-compose up -d
-$ sqlx database create
-$ sea-orm-cli migrate -d migrations
-$ cargo run
+cargo install sqlx-cli
+cargo install sea-orm-cli
 ```
+
+Run docker and set up the object storage:
+
+```bash
+docker-compose up -d
+aws configure --profile localstack
+# AWS Access Key ID: test
+# AWS Secret Access Key: test
+# Default region name: us-east-1
+# Default output format: json
+aws --endpoint-url=http://localhost:4566 --profile localstack s3 mb s3://test
+```
+
+Run the migrations:
+
+```bash
+sqlx database create
+sea-orm-cli migrate -d migrations
+```
+
+Run the project:
+
+```bash
+cargo run
+```
+
+### How to test it
+
+This project only has E2E tests, so you need to have the DB running to be able to run the tests. On the resolvers and on the controllers
+you can find the `tests.rs` file, there you can find the tests for each resolver and controller.
+
+1. Change the DB on `.env` to something like `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/somedb_test"`;
+2. Start the DB:
+   ```bash
+   sqlx database create
+   sea-orm-cli migrate -d migrations
+   cargo test
+   ```
+3. To run the tests:
+   ```bash
+   cargo test
+   ```
 
 ## How to deploy it
 
