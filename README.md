@@ -1,60 +1,86 @@
 # Rust GraphQL Template
 
-**THIS PROJECT IS STILL ONGOING, USE IT ON YOUR OWN RISK**
+## Overview
 
-A full feature template to develop server-side GraphQL APIs using Rust for data and processor heavy APIs.
+This simple template is designed to simplify the development of server-side GraphQL APIs using Rust, by providing a
+basic structure, boilerplate code and some common functionalities.
 
-<small>**Note:** this project is not endorsed by the Rust Foundation</small>
+This template is particularly suited for data-intensive and processor-heavy APIs.
 
-## Technologies used
+**Disclaimer:** This project is not endorsed by the Rust Foundation.
 
-For this template we use the following frameworks and libraries:
+## Technologies
+
+This template incorporates several leading technologies and frameworks:
 
 - **[Actix-Web](https://actix.rs/):** the most common used back-end framework in the Rust ecosystem;
 - **[Async-GraphQL](https://async-graphql.github.io/async-graphql/en/index.html):** GraphQL adaptor;
 - **[SeaOrm](https://www.sea-ql.org/SeaORM/)**: a SQL ORM for interacting with the database;
 
-## What is implemented
+## Features
 
-Three services are implemented:
+Currently, the following features are implemented:
 
-- Local and External OAuth 2.0 authentication in REST;
-- User CRUD;
-- Image upload with compression (it needs to be improved, very slow performance);
+### Error Handling
 
-## How to use it
+- Custom error handling with `Into<T>` and `From<T>` traits, to be compatible with both GraphQL and REST APIs default error handling.
 
-Just click on the `Use this template` button and follow the instructions.
+### Authentication
+
+- [JWT](https://jwt.io/) [OAuth2](https://oauth.net/2/) authentication with refresh token;
+- [Facebook](https://facebook.com/) and [Google](https://google.com) OAuth2 authentication;
+- Two-factor authentication with email.
+
+### Basic CRUD operations
+
+- User CRUD opeations in GraphQL
+
+### File Upload
+
+- Generic S3 compatible Object Storage upload with [Rusoto S3](https://crates.io/crates/rusoto_s3);
+- Image upload with compression using the [Image crate](https://crates.io/crates/image) (Performnance improvements may be required for heavy loads).
+
+## Usage Instructions
+
+To utilize this template:
+
+1. Click `Use this template` button on the top of the repository;
+2. Choose a name for your project;
+3. Mofify the following files to fit your project:
+   - `README.md` to reflect your project's specifics;
+   - `Cargo.toml` for the project's name and version.
+4. Update the file headers with your copyright information, adhering to the MPLv2.0 license.
 
 ## Project Structure
 
-The project is divided into workspaces:
+### Workspaces
 
-1. **Entities:** here is where we define our DB data models;
-2. **Migrations:** here is where we define our DB migrations, I left it as a code first, so it uses a `Schema` to
-   auto-generate the table migration structure;
-3. **App:** here is where we define our business logic, it is divided into modules, each module has its own
-   responsibility;
+The project is organized into the following workspaces:
 
-The App tries to follow a basic MSC/MSR (Model, Service, Controller/Resolver) pattern, where the:
+1. **Entities:** defines the database data models;
+2. **Migrations:** manages the database migrations using a code-first approache
+with `Schema`;
+3. **App:** the core business logic, divided into distinct modules following MSC pattern.
 
-- `Model` is the DTO (Data Transfer Object) GQL Object that represents the data that will be shown by the API;
-- `Service` is the business logic that will be used to process the data for a specific Data Model;
-- `Controller`: only applies to AUTH, it is the REST controller that will be used to authenticate the user;
-- `Resolver` is the GraphQL resolver that will be used to expose in the API the data for a specific Data Model;
-- `Providers` are the external services that will be used by the App, like the DB, the OAuth2 provider, etc;
+### App Structure
 
-## How to run it locally
+The application adheres closely to a MSC/MSR (Model, Service, Controller/Resolver) pattern:
 
-### OS and Software requirements
+- `Model`: the DTOs (Data Transfer Object) and GQL Objects representing API-exposed data;
+- `Service`: processes data for specific Data Models, and is responsible for the business logic;
+- `Controller`: manages REST-based API endpoints, mostly responsible only for user authentication;
+- `Resolver`: handles GraphQL queries and mutations for specific Data Models;
+- `Providers`: external services used by the app (e.g., PostgreSQL, Redis).
 
-This template requires a MacOS or Linux machine with the following applications installed:
+## System Requirements
 
-- _[Docker](https://www.docker.com/) or [Podman](https://podman.io/)_: to be able to run the PostgreSQL database, Redis Cache and the Object Storage;
-- _[Rust](https://www.rust-lang.org/)_: to be able to run and devolep this template;
-- _[AWS CLI](https://aws.amazon.com/pt/cli/)_: to be able to run the Object Storage;
+Apart from [Rust](https://www.rust-lang.org/), to develop and run this template, ensure your system meets the following prerequisites:
 
-### Configuration
+- _Operating System_: MacOS or Linux (it is untested on Windows);
+- _[Docker](https://www.docker.com/) or [Podman](https://podman.io/)_: required for running the PostgreSQL database, Redis Cache, and Object Storage, and for deployment.
+- _[AWS CLI](https://aws.amazon.com/cli/)_: to be able to run the Object Storage;
+
+## Configuration
 
 Create a `.env` file in the root of the project with the following content:
 
@@ -62,8 +88,9 @@ Create a `.env` file in the root of the project with the following content:
 # Environment Setup
 ENV="development"
 
-# TCP port
+# TCP port and host
 PORT=5000
+HOST="127.0.0.1"
 
 # DBs Setup
 REDIS_URL="redis://localhost:6379"
@@ -106,78 +133,59 @@ OBJECT_STORAGE_HOST="localhost:4566"
 OBJECT_STORAGE_NAMESPACE="00000000-0000-0000-0000-000000000000"
 ```
 
-## How to run it
+## Running the project
 
-Install the CLI tools for Database creation (sqlx-cli) and migrations (sea-orm-cli):
+### Initial Setup
 
-```bash
-cargo install sqlx-cli
-cargo install sea-orm-cli
-```
-
-Run docker and set up the object storage:
-
-```bash
-docker-compose up -d
-aws configure --profile localstack
-# AWS Access Key ID: test
-# AWS Secret Access Key: test
-# Default region name: us-east-1
-# Default output format: json
-aws --endpoint-url=http://localhost:4566 --profile localstack s3 mb s3://test
-```
-
-Run the migrations:
-
-```bash
-sqlx database create
-sea-orm-cli migrate -d migrations
-```
-
-After this you have two options to run the project:
-
-- Locally;
-- In a docker container.
-
-### Run locally
-
-Run the project:
-
-```bash
-cargo run
-```
-
-### Run in docker container
-
-Build the docker image and run the project:
-
-```bash
-docker build -t graphqlapi .
-docker-compose -f compose.yaml -f compose.apps.yaml up  
-```
-
-## How to test it
-
-This project only has E2E tests, so you need to have the DB running to be able to run the tests. On the resolvers and on the controllers
-you can find the `tests.rs` file, there you can find the tests for each resolver and controller.
-
-1. Change the DB on `.env` to something like `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/somedb_test"`;
-2. Start the DB:
+1. Install CLI tools for database setup and migrations:
+   ```bash
+   cargo install sqlx-cli
+   cargo install sea-orm-cli
+   ```
+2. Initialize Docker:
+   ```bash
+   docker-compose up -d
+   ```
+3. Set up object storage:
+   ```bash
+   aws configure --profile localstack
+   # AWS Access Key ID: test
+   # AWS Secret Access Key: test
+   # Default region name: us-east-1
+   # Default output format: json
+   aws --endpoint-url=http://localhost:4566 --profile localstack s3 mb s3://test
+   ```
+4. Create the Database and run the migrations:
    ```bash
    sqlx database create
    sea-orm-cli migrate -d migrations
-   cargo test
+   ```
+
+### Running Options
+
+- Locally:
+   ```bash
+   cargo run
+   ```
+- Within a Docker container:
+   ```bash
+   docker build -t graphqlapi .
+   docker-compose -f compose.yaml -f compose.apps.yaml up
+   ```
+
+## Testing
+
+The project only includes end-to-end (E2E) tests:
+1. Set the `.env` file with a test database;
+2. Create the test Database and run the migrations:
+   ```bash
+   sqlx database create
+   sea-orm-cli migrate -d migrations
    ```
 3. To run the tests:
    ```bash
    cargo test
    ```
-
-## How to deploy it
-
-TODO: create Dockerfile for deployment
-
-<small>Note to self: deploy to Dokku? Or kubernetes? Or both?</small>
 
 ## License
 
