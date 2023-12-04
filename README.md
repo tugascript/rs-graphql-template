@@ -187,6 +187,10 @@ The project only includes end-to-end (E2E) tests:
    cargo test
    ```
 
+## Contributing
+
+I would love your input! I want to make contributing to this project as easy and transparent as possible, please read the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.
+
 ## License
 
 This template is licensed under the Mozilla Public License 2.0, see the [LICENSE](LICENSE) file for details.
