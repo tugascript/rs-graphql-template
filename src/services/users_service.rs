@@ -62,8 +62,7 @@ pub async fn create_user(
     mut password: String,
     provider: OAuthProviderEnum,
 ) -> Result<Model, ServiceError> {
-    tracing::info_span!("users_service::create_user");
-    tracing::trace_span!("Creating user");
+    tracing::info_span!("users_service::create_user", %first_name);
     let email = email.to_lowercase();
     let first_name = format_name(&first_name)?;
     let last_name = format_name(&last_name)?;
@@ -88,6 +87,7 @@ pub async fn create_user(
         .get_connection()
         .transaction::<_, Model, DbErr>(|txn| {
             Box::pin(async move {
+                tracing::info!("Creating user...");
                 let user = ActiveModel {
                     email: Set(email.clone()),
                     first_name: Set(first_name),
@@ -100,6 +100,8 @@ pub async fn create_user(
                 }
                 .insert(txn)
                 .await?;
+                tracing::info!("User created");
+                tracing::info!("Creating OAuth provider...");
                 oauth_provider::ActiveModel {
                     user_email: Set(email),
                     provider: Set(provider),
@@ -108,7 +110,7 @@ pub async fn create_user(
                 }
                 .insert(txn)
                 .await?;
-
+                tracing::info!("OAuth provider created");
                 Ok(user)
             })
         })
@@ -126,11 +128,14 @@ pub async fn find_or_create_oauth_provider(
     email: &str,
     provider: OAuthProviderEnum,
 ) -> Result<(), ServiceError> {
+    tracing::info_span!("users_service::find_or_create_oauth_provider");
     let count = oauth_provider::Entity::find_by_email_and_provider(email, provider)
         .count(db.get_connection())
         .await?;
 
     if count == 0 {
+        tracing::info!("OAuth provider not found");
+        tracing::info!("Creating OAuth provider");
         oauth_provider::ActiveModel {
             user_email: Set(email.to_string()),
             provider: Set(provider),
@@ -158,11 +163,13 @@ pub async fn find_or_create(
         .await?;
 
     if let Some(model) = user {
-        tracing::trace_span!("User found");
+        tracing::info!("User found");
         find_or_create_oauth_provider(db, &formatted_email, provider).await?;
         return Ok(model);
     }
 
+    tracing::info!("User not found");
+    tracing::info!("Creating user");
     let user = create_user(
         db,
         first_name,
@@ -173,17 +180,16 @@ pub async fn find_or_create(
         provider,
     )
     .await?;
-    tracing::trace_span!("New user created");
+    tracing::info!("New user created");
     Ok(user)
 }
 
 pub async fn find_one_by_id(db: &Database, id: i32) -> Result<Model, ServiceError> {
     tracing::info_span!("users_service::find_one_by_id", %id);
     let user = Entity::find_by_id(id).one(db.get_connection()).await?;
-
     match user {
         Some(value) => {
-            tracing::trace_span!("User found", %id);
+            tracing::info!("User found");
             Ok(value)
         }
         None => Err(ServiceError::not_found::<Error>(USER_NOT_FOUND, None)),
@@ -191,12 +197,16 @@ pub async fn find_one_by_id(db: &Database, id: i32) -> Result<Model, ServiceErro
 }
 
 pub async fn find_one_by_email(db: &Database, email: &str) -> Result<Model, ServiceError> {
+    tracing::info_span!("users_service::find_one_by_email");
     let user = Entity::find_by_email(email)
         .one(db.get_connection())
         .await?;
 
     match user {
-        Some(value) => Ok(value),
+        Some(value) => {
+            tracing::info!("User found");
+            Ok(value)
+        }
         None => Err(ServiceError::unauthorized::<ServiceError>(
             INVALID_CREDENTIALS,
             None,
@@ -205,12 +215,16 @@ pub async fn find_one_by_email(db: &Database, email: &str) -> Result<Model, Serv
 }
 
 pub async fn find_one_by_username(db: &Database, username: &str) -> Result<Model, ServiceError> {
+    tracing::info_span!("users_service::find_one_by_username");
     let user = Entity::find_by_username(username)
         .one(db.get_connection())
         .await?;
 
     match user {
-        Some(value) => Ok(value),
+        Some(value) => {
+            tracing::info!("User found");
+            Ok(value)
+        }
         None => Err(ServiceError::not_found::<Error>(USER_NOT_FOUND, None)),
     }
 }

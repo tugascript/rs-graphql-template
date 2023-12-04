@@ -1,0 +1,48 @@
+version: "3.8"
+services:
+  graphqlapi:
+    container_name: graphqlapi
+    image: graphqlapi
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:5000"
+    depends_on:
+      - postgres
+      - redis
+      - localstack
+    environment:
+      - ENV=development
+      - PORT=5000
+      - HOST=0.0.0.0
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/testdb
+      - ACCESS_SECRET=V7Fl1DyDQ4ysFKPpQ7RsWVB1TBGeXMpB
+      - ACCESS_TIME=600
+      - CONFIRMATION_SECRET=sGaa27W3LnLf4caNl7H4MaKy1EgEHDMG
+      - CONFIRMATION_TIME=3600
+      - RESET_SECRET=o2Da2SujeDwDj1x8Nfc06KrnG49Tmi6Z
+      - RESET_TIME=1800
+      - REFRESH_SECRET=j3mOkMxbt06lRZHvUh07W38npJaeVuhy
+      - REFRESH_TIME=604800
+      - REFRESH_NAME=cookie_name
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=587
+      - EMAIL_USER=johndoe@gmail.com
+      - EMAIL_PASSWORD=your_email_password
+      - API_ID=89cb82ff-823e-4eb7-b32e-acecae7223f4
+      - FRONTEND_URL=http://localhost:3000
+      - BACKEND_URL=http://localhost:5000
+      - GOOGLE_CLIENT_ID=000000000000
+      - GOOGLE_CLIENT_SECRET=000000000000
+      - FACEBOOK_CLIENT_ID=000000000000
+      - FACEBOOK_CLIENT_SECRET=000000000000
+      - OBJECT_STORAGE_BUCKET=test
+      - OBJECT_STORAGE_SECRET_KEY=test
+      - OBJECT_STORAGE_ACCESS_KEY=test
+      - OBJECT_STORAGE_REGION=us-east-1
+      - OBJECT_STORAGE_HOST=localstack:4566
+      - OBJECT_STORAGE_NAMESPACE=009b51cb-60f8-4d23-8e04-3178f0b8b0b6
+    networks:
+      - provider_net

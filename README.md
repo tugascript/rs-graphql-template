@@ -106,9 +106,9 @@ OBJECT_STORAGE_HOST="localhost:4566"
 OBJECT_STORAGE_NAMESPACE="00000000-0000-0000-0000-000000000000"
 ```
 
-### How to run it
+## How to run it
 
-Install necessary cargo crates:
+Install the CLI tools for Database creation (sqlx-cli) and migrations (sea-orm-cli):
 
 ```bash
 cargo install sqlx-cli
@@ -134,13 +134,29 @@ sqlx database create
 sea-orm-cli migrate -d migrations
 ```
 
+After this you have two options to run the project:
+
+- Locally;
+- In a docker container.
+
+### Run locally
+
 Run the project:
 
 ```bash
 cargo run
 ```
 
-### How to test it
+### Run in docker container
+
+Build the docker image and run the project:
+
+```bash
+docker build -t graphqlapi .
+docker-compose -f compose.yaml -f compose.apps.yaml up  
+```
+
+## How to test it
 
 This project only has E2E tests, so you need to have the DB running to be able to run the tests. On the resolvers and on the controllers
 you can find the `tests.rs` file, there you can find the tests for each resolver and controller.

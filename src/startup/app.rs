@@ -26,9 +26,9 @@ pub struct ActixApp {
 
 impl ActixApp {
     pub async fn new() -> Result<Self, Error> {
-        if dotenvy::dotenv().is_err() {
-            println!("No .env file found");
-            println!("Using environment variables instead");
+        if let Err(e) = dotenvy::dotenv() {
+            tracing::warn!("Failed to load .env file: {}", e);
+            tracing::warn!("Using default environment variables");
         }
 
         let ServerLocation(host, port) = ServerLocation::new();
@@ -42,6 +42,7 @@ impl ActixApp {
         })
         .listen(listener)?
         .run();
+        tracing::info!("Server running on port {}", port);
         Ok(Self { port, server })
     }
 

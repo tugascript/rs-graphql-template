@@ -1,7 +1,9 @@
 /target
 .idea
 .env
+*.env
 .vscode
 /localstack
 /localstack_data
 /data
+/postgres_data
