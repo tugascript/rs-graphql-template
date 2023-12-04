@@ -25,6 +25,8 @@ Pull requests are the best way to propose changes to the codebase. We actively w
 4. Make sure your code lints.
 5. Issue that pull request!
 
+This project requires signing commits and pull requests with a verified signature. Please read [this guide](https://docs.github.com/en/github/authenticating-to-github/managing-commit-signature-verification) to learn how to sign your commits and pull requests.
+
 ### File Headers
 
 Please update the file headers with your information, adhering to the MPLv2.0 license:
