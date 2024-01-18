@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-async-graphql = "6"
+async-graphql = "7"
 chrono = "0.4"
 sea-orm = { version = "0.12", features = [
     "sqlx-postgres",
