@@ -82,7 +82,7 @@ async fn create_code(
     exp: i64,
 ) -> Result<(), ServiceError> {
     tracing::info!("Creating two factor code");
-    let exp_usize = usize::try_from(exp)
+    let exp_usize = u64::try_from(exp)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     let key = format!("access_code:{}", email);
     let mut connection = cache.get_connection().await?;
@@ -415,7 +415,7 @@ async fn create_blacklisted_token(
     exp: i64,
 ) -> Result<(), ServiceError> {
     tracing::trace_span!("Creating blacklisted token", id = %user_id);
-    let exp_usize = usize::try_from(exp)
+    let exp_usize = u64::try_from(exp)
         .map_err(|e| ServiceError::internal_server_error(SOMETHING_WENT_WRONG, Some(e)))?;
     let mut connection = cache.get_connection().await?;
     let key = format!("{}:{}", BLACKLIST_TOKEN, token_id);
