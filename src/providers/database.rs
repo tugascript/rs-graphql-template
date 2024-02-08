@@ -6,7 +6,7 @@
 
 use std::env;
 
-use anyhow::Error;
+use anyhow::Result;
 use sea_orm::DatabaseConnection;
 
 #[derive(Clone, Debug)]
@@ -15,7 +15,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new() -> Result<Self, Error> {
+    pub async fn new() -> Result<Self> {
         let database_url =
             env::var("DATABASE_URL").expect("Missing the DATABASE_URL environment variable.");
         let connection = sea_orm::Database::connect(&database_url).await?;

@@ -12,7 +12,6 @@ use rust_graphql_template::startup::{ActixApp, Telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv()?;
     let subscriber = Telemetry::get_subscriber("rust_graphql_template", "info");
     Telemetry::init_subscriber(subscriber);
     let application = ActixApp::new().await?;

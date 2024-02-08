@@ -27,9 +27,6 @@ RUN apt-get update -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Appease dotenvy
-RUN touch .env
-
 # Copy the binary and extra files from the builder stage
 COPY --from=builder /app/target/release/app app
 
