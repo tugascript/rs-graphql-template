@@ -37,11 +37,8 @@ pub async fn load_files(
         .into());
     }
 
-    let mut files_map = HashMap::<FileId, UploadedFile>::new();
-
-    for file in files {
-        files_map.insert(FileId(file.id), file.into());
-    }
-
-    Ok(files_map)
+    Ok(files
+        .into_iter()
+        .map(|file| (FileId(file.id), file.into()))
+        .collect())
 }

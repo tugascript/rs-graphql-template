@@ -36,11 +36,8 @@ pub async fn load_users(
         .into());
     }
 
-    let mut users_map = HashMap::<UserId, User>::new();
-
-    for user in users {
-        users_map.insert(UserId(user.id), user.into());
-    }
-
-    Ok(users_map)
+    Ok(users
+        .into_iter()
+        .map(|user| (UserId(user.id), user.into()))
+        .collect())
 }
