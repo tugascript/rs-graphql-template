@@ -163,10 +163,13 @@ impl GQLQuery for Entity {
         }
 
         (
-            Self::find().filter(condition).order_by_asc(match cursor {
-                CursorEnum::Alpha => Column::Username,
-                CursorEnum::Date => Column::Id,
-            }),
+            Self::find().filter(condition).order_by(
+                match cursor {
+                    CursorEnum::Alpha => Column::Username,
+                    CursorEnum::Date => Column::Id,
+                },
+                order.into(),
+            ),
             match inverse_condition {
                 Some(inverse_condition) => Some(Self::find().filter(inverse_condition)),
                 None => None,
