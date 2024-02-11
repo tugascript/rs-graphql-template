@@ -5,7 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use async_graphql::connection::{Connection, Edge, EmptyFields};
-use async_graphql::{Context, Object, Result, Upload};
+use async_graphql::{Context, Error, Object, Result, Upload};
 
 use entities::enums::{CursorEnum, OrderEnum};
 use entities::helpers::GQLAfter;
@@ -43,8 +43,13 @@ impl UsersQuery {
         ctx: &Context<'_>,
         order: OrderEnum,
         cursor: CursorEnum,
-        limit: u64,
+        #[graphql(validator(minimum = 1, maximum = 100))] limit: u64,
+        #[graphql(validator(
+            min_length = 1,
+            regex = r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+        ))]
         after: Option<String>,
+        #[graphql(validator(min_length = 3, max_length = 50, regex = r"(^[\p{L}0-9'\.\s]*$)"))]
         search: Option<String>,
     ) -> Result<Connection<String, User, TotalCount, EmptyFields>> {
         let db = ctx.data::<Database>()?;
@@ -76,7 +81,10 @@ impl UsersQuery {
     #[graphql(guard = "AuthGuard")]
     async fn me(&self, ctx: &Context<'_>) -> Result<User> {
         let db = ctx.data::<Database>()?;
-        let user = AccessUser::get_access_user(ctx)?;
+        let user = ctx
+            .data::<Option<AccessUser>>()?
+            .as_ref()
+            .ok_or_else(|| Error::new("Unauthorized"))?;
         Ok(users_service::find_one_by_id(db, user.id).await?.into())
     }
 }
@@ -95,7 +103,10 @@ impl UsersMutation {
         #[graphql(validator(custom = "UpdateNameValidator"))] input: UpdateName,
     ) -> Result<User> {
         let db = ctx.data::<Database>()?;
-        let user = AccessUser::get_access_user(ctx)?;
+        let user = ctx
+            .data::<Option<AccessUser>>()?
+            .as_ref()
+            .ok_or_else(|| Error::new("Unauthorized"))?;
         Ok(
             users_service::update_name(db, user.id, input.first_name, input.last_name)
                 .await?
@@ -110,7 +121,10 @@ impl UsersMutation {
         #[graphql(validator(email, min_length = 5, max_length = 200))] email: String,
     ) -> Result<User> {
         let db = ctx.data::<Database>()?;
-        let user = AccessUser::get_access_user(ctx)?;
+        let user = ctx
+            .data::<Option<AccessUser>>()?
+            .as_ref()
+            .ok_or_else(|| Error::new("Unauthorized"))?;
         Ok(users_service::update_email(db, user.id, &email)
             .await?
             .into())
@@ -119,7 +133,10 @@ impl UsersMutation {
     #[graphql(guard = "AuthGuard")]
     async fn delete_user(&self, ctx: &Context<'_>) -> Result<Message> {
         let db = ctx.data::<Database>()?;
-        let user = AccessUser::get_access_user(ctx)?;
+        let user = ctx
+            .data::<Option<AccessUser>>()?
+            .as_ref()
+            .ok_or_else(|| Error::new("Unauthorized"))?;
         users_service::delete_user(db, user.id).await?;
         Ok(Message::new("User deleted successfully"))
     }

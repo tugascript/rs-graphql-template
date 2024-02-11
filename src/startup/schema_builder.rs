@@ -12,9 +12,15 @@ use async_graphql::{
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 
-use crate::providers::{Database, Jwt, ObjectStorage};
-use crate::resolvers::{health_resolver, uploader_resolver, users_resolver};
-use crate::{common::AuthTokens, data_loaders::SeaOrmLoader};
+use crate::data_loaders::SeaOrmLoader;
+use crate::{
+    helpers::AccessUser,
+    providers::{Database, ObjectStorage},
+};
+use crate::{
+    providers::Jwt,
+    resolvers::{health_resolver, uploader_resolver, users_resolver},
+};
 
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(users_resolver::UsersMutation);
@@ -28,7 +34,6 @@ pub struct QueryRoot(
 
 pub fn build_schema(
     database: &Database,
-    jwt: &Jwt,
     object_storage: ObjectStorage,
 ) -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
     Schema::build(
@@ -41,18 +46,22 @@ pub fn build_schema(
         tokio::task::spawn,
     ))
     .data(database.to_owned())
-    .data(jwt.to_owned())
     .data(object_storage)
     .finish()
 }
 
 pub async fn graphql_request(
     schema: Data<Schema<QueryRoot, MutationRoot, EmptySubscription>>,
+    jwt: Data<Jwt>,
     req: HttpRequest,
     gql_req: GraphQLRequest,
 ) -> GraphQLResponse {
     schema
-        .execute(gql_req.into_inner().data(AuthTokens::new(&req)))
+        .execute(
+            gql_req
+                .into_inner()
+                .data(AccessUser::from_request(jwt.as_ref(), &req)),
+        )
         .await
         .into()
 }

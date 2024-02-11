@@ -7,7 +7,7 @@
 pub use auth_tokens::*;
 pub use error_handling::*;
 pub use formatters::*;
-pub use regexes::*;
+// pub use regexes::*;
 pub use validators::*;
 
 pub mod auth_tokens;

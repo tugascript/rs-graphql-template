@@ -122,7 +122,12 @@ pub async fn upload_image(
     tracing::info_span!("uploader_service::upload_image");
     let user_id = match user_id {
         Some(access_user) => access_user,
-        None => AccessUser::get_access_user(ctx)?.id,
+        None => {
+            ctx.data::<Option<AccessUser>>()?
+                .as_ref()
+                .ok_or_else(|| Error::new("Unauthorized"))?
+                .id
+        }
     };
     let object_storage = match os {
         Some(os) => os,

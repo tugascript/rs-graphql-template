@@ -65,7 +65,6 @@ impl ActixApp {
             let jwt = Jwt::new(&environment, &urls.api_id);
             cfg.app_data(web::Data::new(build_schema(
                 &db,
-                &jwt,
                 ObjectStorage::new(&environment),
             )))
             .service(

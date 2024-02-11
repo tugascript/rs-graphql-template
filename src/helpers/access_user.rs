@@ -4,11 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use async_graphql::{Context, Error, Result};
-
+use actix_web::HttpRequest;
 use entities::enums::RoleEnum;
 
-use crate::common::{AuthTokens, InternalCause, ServiceError, UNAUTHORIZED};
+use crate::common::AuthTokens;
 use crate::providers::Jwt;
 
 #[derive(Debug, Clone)]
@@ -22,20 +21,16 @@ impl AccessUser {
         Self { id, role }
     }
 
-    pub fn get_access_user(ctx: &Context<'_>) -> Result<Self> {
-        let tokens = ctx.data::<AuthTokens>()?;
-        let access_token = tokens
-            .access_token
-            .as_ref()
-            .ok_or(ServiceError::unauthorized(
-                UNAUTHORIZED,
-                Some(InternalCause::new("No access token in header")),
-            ))?;
-        let jwt = ctx.data::<Jwt>()?;
+    pub fn from_request(jwt: &Jwt, req: &HttpRequest) -> Option<Self> {
+        let tokens = AuthTokens::new(req);
 
-        match jwt.verify_access_token(access_token) {
-            Ok((id, role)) => Ok(Self::new(id, role)),
-            Err(_) => Err(Error::new("Unauthorized")),
+        if let Some(access_token) = tokens.access_token {
+            match jwt.verify_access_token(&access_token) {
+                Ok((id, role)) => Some(Self::new(id, role)),
+                Err(_) => None,
+            }
+        } else {
+            None
         }
     }
 }

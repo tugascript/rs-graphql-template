@@ -277,7 +277,10 @@ pub async fn query(
 }
 
 pub async fn update_picture(ctx: &Context<'_>, picture: Upload) -> Result<Model, GqlError> {
-    let access_user = AccessUser::get_access_user(ctx)?;
+    let access_user = ctx
+        .data::<Option<AccessUser>>()?
+        .as_ref()
+        .ok_or_else(|| ServiceError::unauthorized::<Error>(UNAUTHORIZED, None))?;
     let db = ctx.data::<Database>()?;
     let user = find_one_by_id(db, access_user.id).await?;
     let object_storage = ctx.data::<ObjectStorage>()?;

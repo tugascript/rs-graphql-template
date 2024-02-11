@@ -57,9 +57,9 @@ impl From<Model> for User {
 #[ComplexObject]
 impl User {
     pub async fn email(&self, ctx: &Context<'_>) -> Result<Option<&str>> {
-        let user = match AccessUser::get_access_user(ctx) {
-            Ok(user) => user,
-            Err(_) => return Ok(None),
+        let user = match ctx.data::<Option<AccessUser>>()?.as_ref() {
+            Some(user) => user,
+            None => return Ok(None),
         };
 
         if user.id == self.id {
